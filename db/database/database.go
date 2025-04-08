@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"encoding/json"
@@ -9,6 +9,7 @@ import (
 
 	"db/btree" // your existing B-tree package
 )
+
 // Focus Niggers.
 // DBManifest tracks the DB ID plus a map of collection names to their subdirectory
 type DBManifest struct {
@@ -45,12 +46,12 @@ func NewDatabase(dbPath string, dbID string) (*Database, error) {
 
 	// If manifest.json already exists, load it
 	if _, err := os.Stat(manifestPath); err == nil {
-		if err := db.loadManifest(); err != nil {
+		if _, err := db.LoadManifest(); err != nil {
 			return nil, fmt.Errorf("failed to load manifest: %v", err)
 		}
 	} else {
 		// Otherwise, create a new manifest
-		if err := db.saveManifest(); err != nil {
+		if err := db.SaveManifest(); err != nil {
 			return nil, fmt.Errorf("failed to create new manifest: %v", err)
 		}
 	}
@@ -117,7 +118,7 @@ func (db *Database) CreateCollection(name string, order int) error {
 
 	// Update manifest
 	db.manifest.Collections[name] = name
-	if err := db.saveManifest(); err != nil {
+	if err := db.SaveManifest(); err != nil {
 		return fmt.Errorf("failed to save manifest after creating collection: %v", err)
 	}
 
@@ -158,7 +159,23 @@ func (db *Database) GetCollection(name string) (*Collection, error) {
 	return coll, nil
 }
 
-func (db *Database) saveManifest() error {
+func (db *Database) GetAllCollections() ([]string, error) {
+	db.LoadManifest()
+	manifest, _ := db.LoadManifest()
+	collections := manifest.Collections
+
+	collections_array := make([]string, len(collections))
+	i := 0
+
+	for collection_key := range collections {
+		collections_array[i] = collection_key
+		i++
+	}
+
+	return collections_array, nil
+}
+
+func (db *Database) SaveManifest() error {
 	data, err := json.MarshalIndent(db.manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal manifest: %v", err)
@@ -166,17 +183,17 @@ func (db *Database) saveManifest() error {
 	return os.WriteFile(db.manifestPath, data, 0644)
 }
 
-func (db *Database) loadManifest() error {
+func (db *Database) LoadManifest() (DBManifest, error) {
 	data, err := os.ReadFile(db.manifestPath)
 	if err != nil {
-		return fmt.Errorf("failed to read manifest file: %v", err)
+		return DBManifest{}, fmt.Errorf("failed to read manifest file: %v", err)
 	}
 	var m DBManifest
 	if err := json.Unmarshal(data, &m); err != nil {
-		return fmt.Errorf("failed to unmarshal manifest: %v", err)
+		return DBManifest{}, fmt.Errorf("failed to unmarshal manifest: %v", err)
 	}
 	db.manifest = m
-	return nil
+	return m, nil
 }
 
 // Close closes all loaded collections
@@ -190,7 +207,7 @@ func (db *Database) Close() error {
 		}
 	}
 	// Optionally save the manifest again
-	if err := db.saveManifest(); err != nil {
+	if err := db.SaveManifest(); err != nil {
 		return err
 	}
 	return nil
