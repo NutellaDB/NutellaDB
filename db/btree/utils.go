@@ -10,7 +10,7 @@ func (bt *BTree) InsertKV(key string, value interface{}) {
 	if err != nil {
 		log.Fatalf("Failed to insert key %s: %v", key, err)
 	}
-	fmt.Printf("Inserted key: %s, value: %v\n", key, value)
+	// fmt.Printf("Inserted key: %s, value: %v\n", key, value)
 }
 
 func (bt *BTree) FindKey(key string) {
@@ -31,7 +31,7 @@ func (bt *BTree) UpdateKV(key string, value interface{}) {
 		log.Fatalf("Failed to update key %s: %v", key, err)
 	}
 	if updated {
-		fmt.Printf("Updated key: %s, new value: %v\n", key, value)
+		// fmt.Printf("Updated key: %s, new value: %v\n", key, value)
 	} else {
 		fmt.Printf("Key not found for update, inserting instead: %s\n", key)
 		err = bt.Insert(key, value)
