@@ -1,104 +1,123 @@
 package main
 
 import (
-	"fmt"
-	"log"
-	"os"
-	"path/filepath"
-	"strings"
+    "fmt"
+    "log"
+    "os"
+    "path/filepath"
+    "strings"
 
-	"db/btree" // Import the btree package
-
-	"github.com/google/uuid"
+    "github.com/google/uuid"
 )
 
 func main() {
-	// Clean up any existing database files for this example
-	dbUUID, err := uuid.NewRandom()
-	dbID := fmt.Sprintf("db_%v", strings.Split(dbUUID.String(), "-")[0])
-	if err != nil {
-		log.Fatalf("Error in UUID generation %v", err)
-	}
-	dbPath := filepath.Join(".", "files", dbID)
-	os.RemoveAll(dbPath)
+    dbUUID, err := uuid.NewRandom()
+    if err != nil {
+        log.Fatalf("failed to generate uuid: %v", err)
+    }
+    dbSuffix := strings.Split(dbUUID.String(), "-")[0] // grab first segment
+    dbID := fmt.Sprintf("db_%s", dbSuffix)
+    fmt.Println("Database ID:", dbID)
 
-	// Create a new B-tree with order 3 and DB ID "example_db"
-	bt, err := btree.NewBTree(3, dbID)
-	if err != nil {
-		log.Fatalf("Failed to create B-tree: %v", err)
-	}
+    basePath := filepath.Join(".", "files", dbID)
 
-	// Insert some key-value pairs
-	fmt.Println("Inserting key-value pairs...")
-	bt.InsertKV("apple", "red fruit")
-	bt.InsertKV("banana", "yellow fruit")
-	bt.InsertKV("cherry", "small red fruit")
-	bt.InsertKV("date", "sweet dried fruit")
-	bt.InsertKV("elderberry", "small black fruit")
-	bt.InsertKV("fig", "sweet fruit")
-	bt.InsertKV("grape", "small juicy fruit")
+    // cleanup old stuff first
+    os.RemoveAll(basePath)
 
-	// Find some keys
-	fmt.Println("\nFinding values...")
-	bt.FindKey("apple")
-	bt.FindKey("banana")
-	bt.FindKey("cherry")
-	bt.FindKey("orange") // This key doesn't exist
+    db, err := NewDatabase(basePath, dbID)
+    if err != nil {
+        log.Fatalf("Error creating database: %v", err)
+    }
 
-	// Update some keys
-	fmt.Println("\nUpdating values...")
-	bt.UpdateKV("apple", "crunchy red fruit")
-	bt.UpdateKV("fig", "purple sweet fruit")
-	bt.UpdateKV("orange", "citrus fruit") // This key doesn't exist yet
+    // set up fruits collection
+    if err := db.CreateCollection("fruits", 3); err != nil {
+        log.Fatalf("Error creating fruits collection: %v", err)
+    }
+    fruits, _ := db.GetCollection("fruits")
+    fruits.InsertKV("apple", "red fruit")
+    fruits.InsertKV("banana", "yellow fruit") 
+    fruits.InsertKV("cherry", "small red fruit")
+    fruits.InsertKV("date", "sweet brown fruit")
+    fruits.InsertKV("elderberry", "dark purple berries")
+    fruits.InsertKV("fig", "sweet purple fruit")
+    fruits.InsertKV("grape", "small round fruit")
+    fruits.InsertKV("honeydew", "green melon")
+    fruits.InsertKV("kiwi", "fuzzy brown fruit")
+    fruits.InsertKV("lemon", "sour yellow citrus")
+    fruits.InsertKV("mango", "tropical orange fruit")
+    fruits.InsertKV("nectarine", "smooth peach")
 
-	// Find the updated keys
-	fmt.Println("\nFinding updated values...")
-	bt.FindKey("apple")
-	bt.FindKey("fig")
-	bt.FindKey("orange")
+    // set up plants collection
+    if err := db.CreateCollection("plants", 3); err != nil {
+        log.Fatalf("Error creating plants collection: %v", err)
+    }
+    plants, _ := db.GetCollection("plants")
+    plants.InsertKV("aloe", "succulent plant")
+    plants.InsertKV("bamboo", "fast growing grass")
+    plants.InsertKV("cactus", "desert plant")
+    plants.InsertKV("daisy", "common flower")
+    plants.InsertKV("eucalyptus", "tall tree")
+    plants.InsertKV("fern", "leafy plant")
+    plants.InsertKV("ivy", "climbing plant")
+    plants.InsertKV("jasmine", "fragrant flower")
+    plants.InsertKV("lavender", "purple flower")
+    plants.InsertKV("mint", "aromatic herb")
+    plants.InsertKV("oak", "hardwood tree")
+    plants.InsertKV("palm", "tropical tree")
+    plants.InsertKV("rose", "thorny flower")
+    plants.InsertKV("sage", "herb plant")
 
-	// Delete some keys
-	fmt.Println("\nDeleting keys...")
-	bt.DeleteKey("banana")
-	bt.DeleteKey("elderberry")
-	bt.DeleteKey("watermelon") // This key doesn't exist
+    // try finding some fruits
+    fmt.Println("\n-- Testing fruit lookups across pages --")
+    fruits.FindKey("apple")  
+    fruits.FindKey("grape")  
+    fruits.FindKey("mango")  
+    fruits.FindKey("orange") // should fail
 
-	// Check if the deleted keys exist
-	fmt.Println("\nChecking deleted keys...")
-	bt.FindKey("banana")
-	bt.FindKey("elderberry")
+    // try finding some plants
+    fmt.Println("\n-- Testing plant lookups across pages --")
+    plants.FindKey("aloe")    
+    plants.FindKey("jasmine") 
+    plants.FindKey("sage")    
+    plants.FindKey("zinnia")  // should fail
 
-	// Insert the deleted keys again
-	fmt.Println("\nRe-inserting deleted keys...")
-	bt.InsertKV("banana", "yellow curved fruit")
-	bt.InsertKV("elderberry", "small dark berry")
+    // cleanup
+    if err := db.Close(); err != nil {
+        log.Fatalf("Error closing database: %v", err)
+    }
+    fmt.Println("\nDatabase closed successfully.")
 
-	// Find the re-inserted keys
-	fmt.Println("\nFinding re-inserted keys...")
-	bt.FindKey("banana")
-	bt.FindKey("elderberry")
+    // reopen and verify data persisted
+    fmt.Println("\nRe-opening database:", dbID)
+    db2, err := LoadDatabase(basePath)
+    if err != nil {
+        log.Fatalf("Error loading database: %v", err)
+    }
 
-	// Close the B-tree
-	err = bt.Close()
-	if err != nil {
-		log.Fatalf("Failed to close B-tree: %v", err)
-	}
-	fmt.Println("\nB-tree closed successfully")
+    // check fruits still there
+    fruitsAgain, err := db2.GetCollection("fruits")
+    if err != nil {
+        log.Fatalf("Error loading fruits collection: %v", err)
+    }
+    fmt.Println("\n-- Verifying fruits data after reopen --")
+    fruitsAgain.FindKey("apple")    
+    fruitsAgain.FindKey("honeydew") 
+    fruitsAgain.FindKey("nectarine")
 
-	// Re-open the B-tree
-	fmt.Println("\nRe-opening the B-tree...")
-	bt, err = btree.LoadBTree(dbID)
-	if err != nil {
-		log.Fatalf("Failed to load B-tree: %v", err)
-	}
-	fmt.Println("B-tree loaded successfully")
+    // check plants still there
+    plantsAgain, err := db2.GetCollection("plants")
+    if err != nil {
+        log.Fatalf("Error loading plants collection: %v", err)
+    }
+    fmt.Println("\n-- Verifying plants data after reopen --")
+    plantsAgain.FindKey("bamboo")   
+    plantsAgain.FindKey("lavender") 
+    plantsAgain.FindKey("sage")     
 
-	// Find some keys to verify the data persisted
-	fmt.Println("\nVerifying data after re-opening...")
-	bt.FindKey("apple")
-	bt.FindKey("banana")
-	bt.FindKey("cherry")
-	bt.FindKey("date")
+    // final cleanup
+    if err := db2.Close(); err != nil {
+        log.Fatalf("Error closing database again: %v", err)
+    }
 
-	fmt.Println("\nCheck Complete")
+    fmt.Println("\nAll done!")
 }
