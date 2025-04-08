@@ -77,7 +77,7 @@ func (bt *BTree) saveMetadata() error {
 	bt.metadata.RLock()
 	defer bt.metadata.RUnlock()
 
-	metadataPath := filepath.Join(bt.PageDir, "..", "metadata.json")
+	metadataPath := filepath.Join(bt.PageDir, "metadata.json")
 	data, err := json.MarshalIndent(bt, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %v", err)
