@@ -3,6 +3,7 @@ package main
 import (
 	"db/cache"
 	"db/database"
+	"db/cli"
 	"fmt"
 	"log"
 	"os"
@@ -124,4 +125,8 @@ func main() {
 	fmt.Println("\nAll done!")
 
 	cache.CreateCache(basePath)
+	
+	cli.Execute()
 }
+
+
