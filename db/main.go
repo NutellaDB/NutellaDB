@@ -5,13 +5,20 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"db/btree" // Import the btree package
+
+	"github.com/google/uuid"
 )
 
 func main() {
 	// Clean up any existing database files for this example
-	dbID := "example_db"
+	dbUUID, err := uuid.NewRandom()
+	dbID := fmt.Sprintf("db_%v", strings.Split(dbUUID.String(), "-")[0])
+	if err != nil {
+		log.Fatalf("Error in UUID generation %v", err)
+	}
 	dbPath := filepath.Join(".", "files", dbID)
 	os.RemoveAll(dbPath)
 
@@ -29,6 +36,7 @@ func main() {
 	insertKV(bt, "date", "sweet dried fruit")
 	insertKV(bt, "elderberry", "small black fruit")
 	insertKV(bt, "fig", "sweet fruit")
+	insertKV(bt, "grape", "small juicy fruit")
 	insertKV(bt, "grape", "small juicy fruit")
 
 	// Find some keys

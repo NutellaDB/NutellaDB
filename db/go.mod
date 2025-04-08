@@ -2,4 +2,4 @@ module db
 
 go 1.24.1
 
-require github.com/hashicorp/go-msgpack v0.5.5
+require github.com/google/uuid v1.6.0 // indirect
