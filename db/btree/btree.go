@@ -3,7 +3,6 @@ package btree
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -52,7 +51,7 @@ func NewBTree(order int, collectionName string, pageDir string) (*BTree, error) 
 // LoadBTree loads an existing B-tree from a pages directory
 func LoadBTree(collectionName, pageDir string) (*BTree, error) {
     metadataPath := filepath.Join(pageDir, "metadata.json")
-    data, err := ioutil.ReadFile(metadataPath)
+    data, err := os.ReadFile(metadataPath)
     if err != nil {
         return nil, fmt.Errorf("failed to read metadata file: %v", err)
     }
@@ -83,7 +82,7 @@ func (bt *BTree) saveMetadata() error {
 		return fmt.Errorf("failed to marshal metadata: %v", err)
 	}
 
-	err = ioutil.WriteFile(metadataPath, data, 0644)
+	err = os.WriteFile(metadataPath, data, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write metadata file: %v", err)
 	}

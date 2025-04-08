@@ -3,7 +3,6 @@ package btree
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -20,7 +19,7 @@ func (bt *BTree) saveNode(node *Node) error {
 		return fmt.Errorf("failed to marshal node: %v", err)
 	}
 
-	err = ioutil.WriteFile(nodePath, data, 0644)
+	err = os.WriteFile(nodePath, data, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write node file: %v", err)
 	}
@@ -37,7 +36,7 @@ func (bt *BTree) loadNode(id int) (*Node, error) {
 
 	// Read node file
 	nodePath := filepath.Join(bt.PageDir, fmt.Sprintf("page_%d.json", id))
-	data, err := ioutil.ReadFile(nodePath)
+	data, err := os.ReadFile(nodePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read node file: %v", err)
 	}

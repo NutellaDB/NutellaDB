@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -61,7 +60,7 @@ func NewDatabase(dbPath string, dbID string) (*Database, error) {
 
 func LoadDatabase(dbPath string) (*Database, error) {
 	manifestPath := filepath.Join(dbPath, "manifest.json")
-	data, err := ioutil.ReadFile(manifestPath)
+	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read manifest file: %v", err)
 	}
@@ -164,11 +163,11 @@ func (db *Database) saveManifest() error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal manifest: %v", err)
 	}
-	return ioutil.WriteFile(db.manifestPath, data, 0644)
+	return os.WriteFile(db.manifestPath, data, 0644)
 }
 
 func (db *Database) loadManifest() error {
-	data, err := ioutil.ReadFile(db.manifestPath)
+	data, err := os.ReadFile(db.manifestPath)
 	if err != nil {
 		return fmt.Errorf("failed to read manifest file: %v", err)
 	}
