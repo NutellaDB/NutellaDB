@@ -1,0 +1,14 @@
+{
+  "id": 2,
+  "is_leaf": false,
+  "keys": [
+    {
+      "key": "date",
+      "value": "sweet dried fruit"
+    }
+  ],
+  "children": [
+    1,
+    3
+  ]
+}

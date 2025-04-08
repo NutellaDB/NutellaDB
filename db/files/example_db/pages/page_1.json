@@ -1,0 +1,19 @@
+{
+  "id": 1,
+  "is_leaf": true,
+  "keys": [
+    {
+      "key": "apple",
+      "value": "crunchy red fruit"
+    },
+    {
+      "key": "banana",
+      "value": "yellow curved fruit"
+    },
+    {
+      "key": "cherry",
+      "value": "small red fruit"
+    }
+  ],
+  "children": []
+}

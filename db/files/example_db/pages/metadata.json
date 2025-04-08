@@ -1,0 +1,7 @@
+{
+  "root_id": 2,
+  "order": 3,
+  "next_id": 4,
+  "db_id": "example_db",
+  "page_dir": "files/example_db/pages"
+}
