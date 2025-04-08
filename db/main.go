@@ -101,5 +101,5 @@ func main() {
 	bt.FindKey("cherry")
 	bt.FindKey("date")
 
-	fmt.Println("\nExample complete. Check the files directory to see the human-readable database files.")
+	fmt.Println("\nCheck Complete")
 }
