@@ -57,7 +57,7 @@ func NewBTree(order int, dbID string) (*BTree, error) {
 // LoadBTree loads an existing B-tree from the specified DB ID
 func LoadBTree(dbID string) (*BTree, error) {
 	pageDir := filepath.Join(".", "files", dbID, "pages")
-	metadataPath := filepath.Join(pageDir, "metadata.json")
+	metadataPath := filepath.Join(pageDir, "..", "metadata.json")
 
 	// Read metadata file
 	data, err := ioutil.ReadFile(metadataPath)
@@ -83,7 +83,7 @@ func (bt *BTree) saveMetadata() error {
 	bt.metadata.RLock()
 	defer bt.metadata.RUnlock()
 
-	metadataPath := filepath.Join(bt.PageDir, "metadata.json")
+	metadataPath := filepath.Join(bt.PageDir, "..", "metadata.json")
 	data, err := json.MarshalIndent(bt, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %v", err)
