@@ -37,7 +37,6 @@ func main() {
 	bt.InsertKV("elderberry", "small black fruit")
 	bt.InsertKV("fig", "sweet fruit")
 	bt.InsertKV("grape", "small juicy fruit")
-	bt.InsertKV("grape", "small juicy fruit")
 
 	// Find some keys
 	fmt.Println("\nFinding values...")
