@@ -1,11 +1,11 @@
 package main
 
 import (
+	"db/cli"
+	"db/database"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-	"db/database"
 )
 
 var db, err = database.NewDatabase("./", "uid__")
@@ -93,6 +93,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Unsupported request type", http.StatusBadRequest)
 	}
+	// cli.Execute()
 }
 
 func main() {
@@ -100,7 +101,9 @@ func main() {
 	if err != nil {
 		fmt.Println("DB creation failed %v", err)
 	}
-	http.HandleFunc("/query", queryHandler)
+
+	cli.Execute()
+	// http.HandleFunc("/query", queryHandler)
 	fmt.Println("NutellaDB server is running on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	// log.Fatal(http.ListenAndServe(":8080", nil))
 }
