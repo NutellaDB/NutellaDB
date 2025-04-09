@@ -99,7 +99,7 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	// check()
 	if err != nil {
-		fmt.Println("DB creation failed %v", err)
+		fmt.Println("DB creation failed", err)
 	}
 
 	cli.Execute()
