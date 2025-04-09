@@ -1,13 +1,21 @@
 package cli
 
 import (
+	"bytes"
+	"compress/zlib"
+	"crypto/sha1"
+	"db/database"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
-	"db/database"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -97,116 +105,674 @@ var insertCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(4),
 	Run: func(cmd *cobra.Command, args []string) {
 		dbID := args[0]
-        collName := args[1]
-        key := args[2]
-        value := args[3]
+		collName := args[1]
+		key := args[2]
+		value := args[3]
 
-        basePath := filepath.Join(".", "files", dbID)
+		basePath := filepath.Join(".", "files", dbID)
 
-        db, err := database.LoadDatabase(basePath)
-        if err != nil {
-            log.Fatalf("Error loading database '%s': %v", dbID, err)
-        }
-        defer db.Close()
+		db, err := database.LoadDatabase(basePath)
+		if err != nil {
+			log.Fatalf("Error loading database '%s': %v", dbID, err)
+		}
+		defer db.Close()
 
-        coll, err := db.GetCollection(collName)
-        if err != nil {
-            log.Fatalf("Error getting collection '%s': %v", collName, err)
-        }
+		coll, err := db.GetCollection(collName)
+		if err != nil {
+			log.Fatalf("Error getting collection '%s': %v", collName, err)
+		}
 
-        coll.InsertKV(key, value)
+		coll.InsertKV(key, value)
 
-        fmt.Printf("Inserted key '%s' with value '%s' into collection '%s' in database '%s'.\n", key, value, collName, dbID)
-    },
+		fmt.Printf("Inserted key '%s' with value '%s' into collection '%s' in database '%s'.\n", key, value, collName, dbID)
+	},
 }
 
 // Command to find a key in a collection
 var findKeyCmd = &cobra.Command{
-    Use:   "find [dbID] [collection] [key]",
-    Short: "Find a key in a collection",
-    Args:  cobra.ExactArgs(3),
-    Run: func(cmd *cobra.Command, args []string) {
-        dbID := args[0]
-        collName := args[1]
-        key := args[2]
+	Use:   "find [dbID] [collection] [key]",
+	Short: "Find a key in a collection",
+	Args:  cobra.ExactArgs(3),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbID := args[0]
+		collName := args[1]
+		key := args[2]
 
-        basePath := filepath.Join(".", "files", dbID)
+		basePath := filepath.Join(".", "files", dbID)
 
-        db, err := database.LoadDatabase(basePath)
-        if err != nil {
-            log.Fatalf("Error loading database '%s': %v", dbID, err)
-        }
-        defer db.Close()
+		db, err := database.LoadDatabase(basePath)
+		if err != nil {
+			log.Fatalf("Error loading database '%s': %v", dbID, err)
+		}
+		defer db.Close()
 
-        coll, err := db.GetCollection(collName)
-        if err != nil {
-            log.Fatalf("Error getting collection '%s': %v", collName, err)
-        }
+		coll, err := db.GetCollection(collName)
+		if err != nil {
+			log.Fatalf("Error getting collection '%s': %v", collName, err)
+		}
 
-        coll.FindKey(key) // FindKey is called directly on the B-tree
-    },
+		coll.FindKey(key) // FindKey is called directly on the B-tree
+	},
 }
 
 // Command to update a key-value pair in a collection
 var updateCmd = &cobra.Command{
-    Use:   "update [dbID] [collection] [key] [new_value]",
-    Short: "Update the value of an existing key in a collection",
-    Args:  cobra.ExactArgs(4),
-    Run: func(cmd *cobra.Command, args []string) {
-        dbID := args[0]
-        collName := args[1]
-        key := args[2]
-        newValue := args[3]
+	Use:   "update [dbID] [collection] [key] [new_value]",
+	Short: "Update the value of an existing key in a collection",
+	Args:  cobra.ExactArgs(4),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbID := args[0]
+		collName := args[1]
+		key := args[2]
+		newValue := args[3]
 
-        basePath := filepath.Join(".", "files", dbID)
+		basePath := filepath.Join(".", "files", dbID)
 
-        db, err := database.LoadDatabase(basePath)
-        if err != nil {
-            log.Fatalf("Error loading database '%s': %v", dbID, err)
-        }
-        defer db.Close()
+		db, err := database.LoadDatabase(basePath)
+		if err != nil {
+			log.Fatalf("Error loading database '%s': %v", dbID, err)
+		}
+		defer db.Close()
 
-        coll, err := db.GetCollection(collName)
-        if err != nil {
-            log.Fatalf("Error getting collection '%s': %v", collName, err)
-        }
+		coll, err := db.GetCollection(collName)
+		if err != nil {
+			log.Fatalf("Error getting collection '%s': %v", collName, err)
+		}
 
-        coll.UpdateKV(key, newValue) // UpdateKV is called directly on the B-tree
-    },
+		coll.UpdateKV(key, newValue) // UpdateKV is called directly on the B-tree
+	},
 }
 
 // Command to delete a key from a collection
 var deleteCmd = &cobra.Command{
-    Use:   "delete [dbID] [collection] [key]",
-    Short: "Delete a key from a collection",
-    Args:  cobra.ExactArgs(3),
-    Run: func(cmd *cobra.Command, args []string) {
-        dbID := args[0]
-        collName := args[1]
-        key := args[2]
+	Use:   "delete [dbID] [collection] [key]",
+	Short: "Delete a key from a collection",
+	Args:  cobra.ExactArgs(3),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbID := args[0]
+		collName := args[1]
+		key := args[2]
 
-        basePath := filepath.Join(".", "files", dbID)
+		basePath := filepath.Join(".", "files", dbID)
 
-        db, err := database.LoadDatabase(basePath)
-        if err != nil {
-            log.Fatalf("Error loading database '%s': %v", dbID, err)
-        }
-        defer db.Close()
+		db, err := database.LoadDatabase(basePath)
+		if err != nil {
+			log.Fatalf("Error loading database '%s': %v", dbID, err)
+		}
+		defer db.Close()
 
-        coll, err := db.GetCollection(collName)
-        if err != nil {
-            log.Fatalf("Error getting collection '%s': %v", collName, err)
-        }
+		coll, err := db.GetCollection(collName)
+		if err != nil {
+			log.Fatalf("Error getting collection '%s': %v", collName, err)
+		}
 
-        coll.DeleteKey(key) // DeleteKey is called directly on the B-tree
-    },
+		coll.DeleteKey(key) // DeleteKey is called directly on the B-tree
+	},
+}
+
+// Command to initialize a new Git-like repository inside a database folder.
+var handleInitCmd = &cobra.Command{
+	Use:   "init [dbID]",
+	Short: "Initialize a new git directory",
+	Long:  "This command initializes a new git directory in the specified database folder.",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbID := args[0]
+		basePath := filepath.Join(".", "files", dbID)
+
+		if err := os.MkdirAll(basePath, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating base directory: %s\n", err)
+			return
+		}
+		// Initialize git repository in the provided basePath
+		handleInit(basePath)
+	},
+}
+
+func handleInit(basePath string) {
+	// Create the .nut folder within the basePath
+	gitDir := filepath.Join(basePath, ".nut")
+	dirs := []string{
+		gitDir,
+		filepath.Join(gitDir, "objects"),
+		filepath.Join(gitDir, "refs"),
+	}
+
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating directory %s: %s\n", dir, err)
+		}
+	}
+
+	// Write the HEAD file within the .nut directory.
+	headFileContents := []byte("ref: refs/heads/main\n")
+	headFilePath := filepath.Join(gitDir, "HEAD")
+	if err := os.WriteFile(headFilePath, headFileContents, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing HEAD file: %s\n", err)
+	}
+
+	// Create snapshots.json file inside the .nut directory
+	snapshotsFilePath := filepath.Join(gitDir, "snapshots.json")
+	// Initialize with an empty JSON object.
+	initialJSON := []byte("{}")
+	if err := os.WriteFile(snapshotsFilePath, initialJSON, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing snapshots.json file: %s\n", err)
+	}
+
+	fmt.Printf("Initialized git directory at %s\n", gitDir)
+}
+
+// commitMessage will hold the commit message from the "-m" flag.
+var commitMessage string
+
+// Command to commit all changes and store the snapshot.
+var handleCommitAllCmd = &cobra.Command{
+	Use:   "commit-all <dbID>",
+	Short: "Recursively hash files, create a tree and commit object for the given db",
+	Long: `This command does the following:
+  1. Uses the provided dbID to locate the repository at "./files/<dbID>".
+  2. Loads ignore patterns from .nutignore.
+  3. Recursively hashes all files in the repository (ignoring .nut and matching ignore patterns).
+  4. Writes a tree object for the entire directory structure.
+  5. Creates and stores a commit object with the provided commit message.
+  6. Stores the resulting commit hash, commit message, and a timestamp in snapshots.json with a unique UUID key.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbID := args[0]
+		basePath := filepath.Join(".", "files", dbID)
+		repoGitDir := filepath.Join(basePath, ".nut")
+
+		// Verify that the repository exists.
+		if _, err := os.Stat(repoGitDir); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "Error: repository not found at %s. Please run 'init' first.\n", basePath)
+			os.Exit(1)
+		}
+
+		// Change current working directory to the repository base.
+		if err := os.Chdir(basePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error changing directory to %s: %s\n", basePath, err)
+			os.Exit(1)
+		}
+
+		if commitMessage == "" {
+			fmt.Fprintf(os.Stderr, "Error: commit message cannot be empty. Usage: commit-all <dbID> -m \"<message>\"\n")
+			os.Exit(1)
+		}
+
+		// Load ignore patterns from .nutignore.
+		ignores, err := loadGitignore()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading .nutignore: %s\n", err)
+			os.Exit(1)
+		}
+
+		// Create tree recursively from the repository directory.
+		treeSha, err := writeTreeRecursive(".", ".", ignores)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing tree: %s\n", err)
+			os.Exit(1)
+		}
+
+		sha, err := createAndStoreCommit(treeSha, commitMessage)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error storing commit: %s\n", err)
+			os.Exit(1)
+		}
+
+		// Store the commit snapshot using the relative path.
+		if err := storeSnapshot(sha, commitMessage); err != nil {
+			fmt.Fprintf(os.Stderr, "Error storing snapshot: %s\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println(sha)
+	},
+}
+
+// createAndStoreCommit creates a commit object with the given tree SHA and commit message.
+// It returns the computed commit hash.
+func createAndStoreCommit(treeSha, message string) (string, error) {
+	commitContent := fmt.Sprintf("tree %s\n\n%s\n", treeSha, message)
+	header := fmt.Sprintf("commit %d\u0000", len(commitContent))
+	store := append([]byte(header), []byte(commitContent)...)
+	hash := sha1.Sum(store)
+	sha := fmt.Sprintf("%x", hash)
+
+	// Build path to store the commit object under .nut/objects.
+	dir := sha[:2]
+	name := sha[2:]
+	path := filepath.Join(".nut", "objects", dir, name)
+
+	if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
+		return "", fmt.Errorf("Error creating commit directory: %w", err)
+	}
+
+	var buf bytes.Buffer
+	w := zlib.NewWriter(&buf)
+	_, _ = w.Write(store)
+	w.Close()
+
+	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
+		return "", fmt.Errorf("Error writing commit: %w", err)
+	}
+	return sha, nil
+}
+
+// Snapshot represents a single commit snapshot.
+type Snapshot struct {
+	Commit    string `json:"commit"`
+	Message   string `json:"message"`
+	Timestamp string `json:"timestamp"`
+}
+
+// storeSnapshot updates the snapshots.json file (in the .nut folder) by adding
+// a new entry keyed by a UUID containing the commit hash, commit message, and the current timestamp.
+func storeSnapshot(commitHash, commitMsg string) error {
+	// Since we've already changed to the repository base, use a relative path.
+	snapshotsPath := filepath.Join(".nut", "snapshots.json")
+
+	// Read existing snapshots file.
+	var snapshots map[string]Snapshot
+	data, err := os.ReadFile(snapshotsPath)
+	if err != nil {
+		// If file doesn't exist or cannot be read, start with an empty map.
+		snapshots = make(map[string]Snapshot)
+	} else {
+		if err := json.Unmarshal(data, &snapshots); err != nil {
+			// If unmarshalling fails, start fresh.
+			snapshots = make(map[string]Snapshot)
+		}
+	}
+
+	// Generate a new UUID as the key.
+	id := uuid.New().String()
+	// Use RFC3339 format for the timestamp.
+	timestamp := time.Now().Format(time.RFC3339)
+
+	// Append new snapshot with commit hash, message, and timestamp.
+	snapshots[id] = Snapshot{
+		Commit:    commitHash,
+		Message:   commitMsg,
+		Timestamp: timestamp,
+	}
+
+	// Marshal back to JSON.
+	updatedData, err := json.MarshalIndent(snapshots, "", "  ")
+	if err != nil {
+		return fmt.Errorf("Error marshalling snapshots: %w", err)
+	}
+
+	// Write updated JSON back to snapshots.json.
+	if err := os.WriteFile(snapshotsPath, updatedData, 0644); err != nil {
+		return fmt.Errorf("Error writing snapshots file: %w", err)
+	}
+	return nil
+}
+
+// loadGitignore reads the .nutignore file and returns the list of ignore patterns.
+func loadGitignore() ([]string, error) {
+	data, err := os.ReadFile(".nutignore")
+	if os.IsNotExist(err) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(string(data), "\n")
+	var patterns []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		patterns = append(patterns, line)
+	}
+	return patterns, nil
+}
+
+// writeTreeRecursive creates a tree object for the directory (relative to repo root).
+// 'root' is the repository root (".") and 'dir' is the current directory relative to root.
+func writeTreeRecursive(root, dir string, ignores []string) (string, error) {
+	var entries []byte
+
+	fullDir := filepath.Join(root, dir)
+	files, err := os.ReadDir(fullDir)
+	if err != nil {
+		return "", err
+	}
+
+	for _, f := range files {
+		// Ignore the .nut folder.
+		if f.Name() == ".nut" {
+			continue
+		}
+		// Compute relative path from repo root.
+		relPath := f.Name()
+		if dir != "." {
+			relPath = filepath.Join(dir, f.Name())
+		}
+		// Skip if path matches any ignore pattern.
+		if shouldIgnore(relPath, ignores) {
+			continue
+		}
+
+		var mode string
+		var sha string
+		fullPath := filepath.Join(fullDir, f.Name())
+		if f.IsDir() {
+			mode = "40000"
+			sha, err = writeTreeRecursive(root, relPath, ignores)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			mode = "100644"
+			sha, err = hashAndWriteBlob(fullPath)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		// Create tree entry: "<mode> <filename>\0<sha>"
+		entry := fmt.Sprintf("%s %s", mode, f.Name())
+		entryBytes := []byte(entry)
+		entryBytes = append(entryBytes, 0)
+		shaRaw, _ := hex.DecodeString(sha)
+		entryBytes = append(entryBytes, shaRaw...)
+		entries = append(entries, entryBytes...)
+	}
+
+	header := fmt.Sprintf("tree %d\u0000", len(entries))
+	store := append([]byte(header), entries...)
+	hash := sha1.Sum(store)
+	shaStr := fmt.Sprintf("%x", hash)
+	dirName := shaStr[:2]
+	fileName := shaStr[2:]
+	objPath := filepath.Join(".nut", "objects", dirName, fileName)
+
+	if err := os.MkdirAll(filepath.Dir(objPath), 0755); err != nil {
+		return "", err
+	}
+	var buf bytes.Buffer
+	w := zlib.NewWriter(&buf)
+	_, _ = w.Write(store)
+	w.Close()
+	if err := os.WriteFile(objPath, buf.Bytes(), 0644); err != nil {
+		return "", err
+	}
+	return shaStr, nil
+}
+
+// shouldIgnore checks if the given relative path matches any of the ignore patterns.
+func shouldIgnore(relPath string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if matched, _ := filepath.Match(pattern, relPath); matched {
+			return true
+		}
+		if strings.Contains(relPath, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// hashAndWriteBlob creates a blob object from the given file and returns its SHA.
+func hashAndWriteBlob(filename string) (string, error) {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return "", err
+	}
+	header := fmt.Sprintf("blob %d\u0000", len(content))
+	store := append([]byte(header), content...)
+	hash := sha1.Sum(store)
+	sha := fmt.Sprintf("%x", hash)
+	dir := sha[:2]
+	name := sha[2:]
+	objPath := filepath.Join(".nut", "objects", dir, name)
+	if _, err := os.Stat(objPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
+			return "", err
+		}
+		var buf bytes.Buffer
+		w := zlib.NewWriter(&buf)
+		_, _ = w.Write(store)
+		w.Close()
+		if err := os.WriteFile(objPath, buf.Bytes(), 0644); err != nil {
+			return "", err
+		}
+	}
+	return sha, nil
+}
+
+// New Restore Command
+var restoreCmd = &cobra.Command{
+	Use:   "restore <dbname>",
+	Short: "Restore a database to a previous commit snapshot",
+	Long: `This command will:
+  1. Change directory to the given database (./files/<dbname>).
+  2. Load snapshots stored in .nut/snapshots.json.
+  3. Display the commit hash, commit message, and timestamp (sorted by time).
+  4. Prompt for a commit hash to restore.
+  5. Restore the working directory to that commit state.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbName := args[0]
+		basePath := filepath.Join(".", "files", dbName)
+
+		// Change working directory to the repository base.
+		if err := os.Chdir(basePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error changing directory to %s: %v\n", basePath, err)
+			os.Exit(1)
+		}
+
+		// Load snapshots from .nut/snapshots.json.
+		snapshots, err := loadSnapshots()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading snapshots: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(snapshots) == 0 {
+			fmt.Fprintf(os.Stderr, "No snapshots found.\n")
+			os.Exit(1)
+		}
+
+		// Convert map to slice for sorting.
+		type snapEntry struct {
+			Key      string
+			Snapshot Snapshot
+		}
+		var snapshotList []snapEntry
+		for key, snap := range snapshots {
+			snapshotList = append(snapshotList, snapEntry{Key: key, Snapshot: snap})
+		}
+
+		// Sort snapshots by timestamp.
+		// If timestamps cannot be parsed, fallback to a simple string comparison.
+		sort.Slice(snapshotList, func(i, j int) bool {
+			ti, err1 := time.Parse(time.RFC3339, snapshotList[i].Snapshot.Timestamp)
+			tj, err2 := time.Parse(time.RFC3339, snapshotList[j].Snapshot.Timestamp)
+			if err1 != nil || err2 != nil {
+				return snapshotList[i].Snapshot.Timestamp < snapshotList[j].Snapshot.Timestamp
+			}
+			return ti.Before(tj)
+		})
+
+		// Display snapshots.
+		fmt.Println("Available snapshots:")
+		for _, s := range snapshotList {
+			fmt.Printf("Commit: %s | Message: %s | Timestamp: %s\n",
+				s.Snapshot.Commit, s.Snapshot.Message, s.Snapshot.Timestamp)
+		}
+
+		// Prompt the user to select a commit hash.
+		fmt.Print("Enter commit hash to restore: ")
+		var chosen string
+		fmt.Scanln(&chosen)
+
+		// Verify that the chosen commit exists.
+		found := false
+		for _, s := range snapshotList {
+			if s.Snapshot.Commit == chosen {
+				found = true
+				break
+			}
+		}
+		if !found {
+			fmt.Fprintf(os.Stderr, "Commit hash %s not found in snapshots.\n", chosen)
+			os.Exit(1)
+		}
+
+		// Proceed to restore the chosen commit.
+		restoreCommit(chosen)
+	},
+}
+
+// restoreCommit reads the commit object, extracts the tree SHA, cleans the directory,
+// and restores the tree from that commit.
+func restoreCommit(commitSha string) {
+	data := readObject(commitSha)
+
+	// Find the first null byte to separate header from content.
+	nullIndex := bytes.IndexByte(data, 0)
+	if nullIndex == -1 {
+		fmt.Fprintf(os.Stderr, "Invalid commit object: missing null byte\n")
+		os.Exit(1)
+	}
+	body := data[nullIndex+1:]
+	lines := bytes.Split(body, []byte("\n"))
+	if len(lines) < 1 || !bytes.HasPrefix(lines[0], []byte("tree ")) {
+		fmt.Fprintf(os.Stderr, "Invalid commit object: no tree reference found\n")
+		os.Exit(1)
+	}
+	treeSha := string(bytes.TrimPrefix(lines[0], []byte("tree ")))
+
+	// Load ignore patterns.
+	ignores, _ := loadGitignore()
+
+	// Clean the current directory, preserving .nut and .nutignore.
+	cleanCurrentDirectory(ignores)
+
+	// Restore the tree.
+	restoreTree(treeSha, ".", "", ignores)
+
+	fmt.Printf("Restored to commit %s\n", commitSha)
+}
+
+// loadSnapshots reads snapshots from .nut/snapshots.json.
+func loadSnapshots() (map[string]Snapshot, error) {
+	data, err := os.ReadFile(filepath.Join(".nut", "snapshots.json"))
+	if err != nil {
+		return nil, err
+	}
+	var snapshots map[string]Snapshot
+	if err := json.Unmarshal(data, &snapshots); err != nil {
+		return nil, err
+	}
+	return snapshots, nil
+}
+
+// readObject reads a stored object from .nut/objects given its SHA.
+func readObject(sha string) []byte {
+	dir, name := sha[:2], sha[2:]
+	path := filepath.Join(".nut", "objects", dir, name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading object file: %v\n", err)
+		os.Exit(1)
+	}
+	r, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating zlib reader: %v\n", err)
+		os.Exit(1)
+	}
+	defer r.Close()
+	decompressedData, err := io.ReadAll(r)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error decompressing data: %v\n", err)
+		os.Exit(1)
+	}
+	return decompressedData
+}
+
+// cleanCurrentDirectory removes all files and directories in the current directory,
+// except for .nut and .nutignore.
+func cleanCurrentDirectory(ignores []string) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading current directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == ".nut" || name == ".nutignore" {
+			continue
+		}
+		if shouldIgnore(name, ignores) {
+			continue
+		}
+		if err := os.RemoveAll(name); err != nil {
+			fmt.Fprintf(os.Stderr, "Error removing %s: %v\n", name, err)
+		}
+	}
+}
+
+// restoreTree recreates the files and directories from a tree object.
+func restoreTree(treeSha, restorePath, repoRel string, ignores []string) {
+	data := readObject(treeSha)
+
+	nullIndex := bytes.IndexByte(data, 0)
+	body := data[nullIndex+1:]
+	i := 0
+	for i < len(body) {
+		modeEnd := bytes.IndexByte(body[i:], ' ')
+		mode := string(body[i : i+modeEnd])
+		i += modeEnd + 1
+		nameEnd := bytes.IndexByte(body[i:], 0)
+		name := string(body[i : i+nameEnd])
+		i += nameEnd + 1
+		entrySha := fmt.Sprintf("%x", body[i:i+20])
+		i += 20
+
+		relEntry := name
+		if repoRel != "" {
+			relEntry = filepath.Join(repoRel, name)
+		}
+		if shouldIgnore(relEntry, ignores) {
+			continue
+		}
+
+		fullPath := filepath.Join(restorePath, name)
+		if mode == "100644" {
+			blobData := readObject(entrySha)
+			nullIdx := bytes.IndexByte(blobData, 0)
+			fileContent := blobData[nullIdx+1:]
+			_ = os.MkdirAll(restorePath, 0755)
+			if err := os.WriteFile(fullPath, fileContent, 0644); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to write file %s: %v\n", fullPath, err)
+			}
+		} else if mode == "40000" || mode == "040000" {
+			if err := os.MkdirAll(fullPath, 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to create directory %s: %v\n", fullPath, err)
+				continue
+			}
+			newRepoRel := relEntry
+			restoreTree(entrySha, fullPath, newRepoRel, ignores)
+		}
+	}
 }
 
 func init() {
 	rootCmd.AddCommand(createDBCmd)
 	rootCmd.AddCommand(createCollectionCmd)
 	rootCmd.AddCommand(insertCmd)
-	rootCmd.AddCommand(findKeyCmd) 
-	rootCmd.AddCommand(updateCmd)  
-	rootCmd.AddCommand(deleteCmd)  
+	rootCmd.AddCommand(findKeyCmd)
+	rootCmd.AddCommand(updateCmd)
+	rootCmd.AddCommand(deleteCmd)
+	rootCmd.AddCommand(handleInitCmd)
+	rootCmd.AddCommand(handleCommitAllCmd)
+	handleCommitAllCmd.Flags().StringVarP(&commitMessage, "message", "m", "", "Commit message")
+	rootCmd.AddCommand(restoreCmd)
 }
