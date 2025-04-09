@@ -1,10 +1,8 @@
 package main
 
 import (
-	"db/cli"
 	"db/database"
 	"encoding/json"
-	"fmt"
 	"net/http"
 )
 
@@ -17,7 +15,7 @@ type Request struct {
 	Value      string `json:"value,omitempty"`
 }
 
-func queryHandler(w http.ResponseWriter, r *http.Request) {
+func QueryHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
 		return
@@ -94,16 +92,4 @@ func queryHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unsupported request type", http.StatusBadRequest)
 	}
 	// cli.Execute()
-}
-
-func main() {
-	// check()
-	if err != nil {
-		fmt.Println("DB creation failed", err)
-	}
-
-	cli.Execute()
-	// http.HandleFunc("/query", queryHandler)
-	fmt.Println("NutellaDB server is running on port 8080")
-	// log.Fatal(http.ListenAndServe(":8080", nil))
 }

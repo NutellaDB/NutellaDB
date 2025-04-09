@@ -39,7 +39,7 @@ type DeltaOperation struct {
 }
 
 // Root command for the CLI
-var rootCmd = &cobra.Command{
+var RootCmd = &cobra.Command{
 	Use:   "dbcli",
 	Short: "CLI for managing the database",
 	Long:  "A Command Line Interface (CLI) for managing collections and data in the custom database application.",
@@ -47,7 +47,7 @@ var rootCmd = &cobra.Command{
 
 // Execute runs the root command
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	if err := RootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error executing CLI: %v\n", err)
 		os.Exit(1)
 	}
@@ -1392,16 +1392,16 @@ func restoreTree(treeSha, restorePath, repoRel string, ignores []string) {
 }
 
 func init() {
-	rootCmd.AddCommand(createDBCmd)
-	rootCmd.AddCommand(createCollectionCmd)
-	rootCmd.AddCommand(insertCmd)
-	rootCmd.AddCommand(findKeyCmd)
-	rootCmd.AddCommand(updateCmd)
-	rootCmd.AddCommand(deleteCmd)
-	rootCmd.AddCommand(handleInitCmd)
-	rootCmd.AddCommand(handleCommitAllCmd)
+	RootCmd.AddCommand(createDBCmd)
+	RootCmd.AddCommand(createCollectionCmd)
+	RootCmd.AddCommand(insertCmd)
+	RootCmd.AddCommand(findKeyCmd)
+	RootCmd.AddCommand(updateCmd)
+	RootCmd.AddCommand(deleteCmd)
+	RootCmd.AddCommand(handleInitCmd)
+	RootCmd.AddCommand(handleCommitAllCmd)
 	handleCommitAllCmd.Flags().StringVarP(&commitMessage, "message", "m", "", "Commit message")
-	rootCmd.AddCommand(restoreCmd)
-	rootCmd.AddCommand(packObjectsCmd)
+	RootCmd.AddCommand(restoreCmd)
+	RootCmd.AddCommand(packObjectsCmd)
 
 }
