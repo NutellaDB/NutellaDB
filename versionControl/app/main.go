@@ -47,33 +47,12 @@ func main() {
 
 	switch command := os.Args[1]; command {
 	case "init":
-		for _, dir := range []string{".git", ".git/objects", ".git/refs"} {
-			if err := os.MkdirAll(dir, 0755); err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating directory: %s\n", err)
-			}
-		}
-		headFileContents := []byte("ref: refs/heads/main\n")
-		if err := os.WriteFile(".git/HEAD", headFileContents, 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing file: %s\n", err)
-		}
-		fmt.Println("Initialized git directory")
-
+		handleInit()
 	case "cat-file":
 		handleCatFile()
 
 	case "hash-object":
-		if len(os.Args) < 3 {
-			fmt.Fprintf(os.Stderr, "usage: mygit hash-object [flags] <filename> \n")
-			os.Exit(1)
-		}
-		write := false
-		fileInd := 2
-		if os.Args[2] == "-w" {
-			write = true
-			fileInd = 3
-		}
-		filename := os.Args[fileInd]
-		hashFile(filename, write)
+		handleHashObject()
 
 	case "ls-tree":
 		handleLsTree()
@@ -82,37 +61,11 @@ func main() {
 		handleWriteTree()
 
 	case "commit-tree":
-		if len(os.Args) < 4 {
-			fmt.Fprintf(os.Stderr, "usage: mygit commit-tree <tree_sha> -m \"<message>\"\n")
-			os.Exit(1)
-		}
-		treeSha := os.Args[2]
-		message := os.Args[4]
-
-		createAndStoreCommit(treeSha, message)
+		handleCommitTree()
 
 	// New unified command: commit-all
 	case "commit-all":
-		// Usage: mygit commit-all -m "<message>"
-		if len(os.Args) < 4 || os.Args[2] != "-m" {
-			fmt.Fprintf(os.Stderr, "usage: mygit commit-all -m \"<message>\"\n")
-			os.Exit(1)
-		}
-		message := os.Args[3]
-		// Load ignore patterns from .gitignore
-		ignores, err := loadGitignore()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading .gitignore: %s\n", err)
-			os.Exit(1)
-		}
-		// Create tree recursively from the current directory (".")
-		treeSha, err := writeTreeRecursive(".", ".", ignores)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing tree: %s\n", err)
-			os.Exit(1)
-		}
-		// Create and store commit object referencing the tree.
-		createAndStoreCommit(treeSha, message)
+		handleCommitAll()
 
 	case "restore":
 		handleRestore()
@@ -121,6 +74,54 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Unknown command %s\n", command)
 		os.Exit(1)
 	}
+}
+
+func handleCommitTree() {
+	if len(os.Args) < 4 {
+		fmt.Fprintf(os.Stderr, "usage: mygit commit-tree <tree_sha> -m \"<message>\"\n")
+		os.Exit(1)
+	}
+	treeSha := os.Args[2]
+	message := os.Args[4]
+
+	createAndStoreCommit(treeSha, message)
+}
+
+func handleCommitAll() {
+	// Usage: mygit commit-all -m "<message>"
+	if len(os.Args) < 4 || os.Args[2] != "-m" {
+		fmt.Fprintf(os.Stderr, "usage: mygit commit-all -m \"<message>\"\n")
+		os.Exit(1)
+	}
+	message := os.Args[3]
+	// Load ignore patterns from .gitignore
+	ignores, err := loadGitignore()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading .gitignore: %s\n", err)
+		os.Exit(1)
+	}
+	// Create tree recursively from the current directory (".")
+	treeSha, err := writeTreeRecursive(".", ".", ignores)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing tree: %s\n", err)
+		os.Exit(1)
+	}
+	// Create and store commit object referencing the tree.
+	createAndStoreCommit(treeSha, message)
+}
+
+func handleInit() {
+	for _, dir := range []string{".git", ".git/objects", ".git/refs"} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating directory: %s\n", err)
+		}
+	}
+	headFileContents := []byte("ref: refs/heads/main\n")
+	if err := os.WriteFile(".git/HEAD", headFileContents, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing file: %s\n", err)
+	}
+	fmt.Println("Initialized git directory")
+
 }
 
 // createAndStoreCommit creates a commit object with given tree SHA and commit message.
@@ -152,6 +153,21 @@ func createAndStoreCommit(treeSha, message string) {
 	}
 
 	fmt.Println(sha)
+}
+
+func handleHashObject() {
+	if len(os.Args) < 3 {
+		fmt.Fprintf(os.Stderr, "usage: mygit hash-object [flags] <filename> \n")
+		os.Exit(1)
+	}
+	write := false
+	fileInd := 2
+	if os.Args[2] == "-w" {
+		write = true
+		fileInd = 3
+	}
+	filename := os.Args[fileInd]
+	hashFile(filename, write)
 }
 
 // loadGitignore reads the .gitignore file (if any) and returns the list of ignore patterns.
