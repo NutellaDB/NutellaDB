@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"crypto/sha1"
 	"db/database"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -21,6 +22,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type PackObject struct {
+	Type       int    // 1=commit, 2=tree, 3=blob, 4=delta (ref delta), 7=obj_delta (offset delta)
+	Data       []byte // object data or delta instructions
+	Size       int    // size of the object
+	BaseObjID  string // base object SHA for ref delta
+	BaseOffset int64  // base object offset for offset delta
+}
+
+// DeltaOperation represents a single delta operation (copy or insert)
+type DeltaOperation struct {
+	IsCopy bool   // true for copy operation, false for insert
+	Offset int    // source offset for copy
+	Size   int    // size of data to copy
+	Data   []byte // data to insert (for insert operation)
+}
+
 // Root command for the CLI
 var rootCmd = &cobra.Command{
 	Use:   "dbcli",
@@ -34,6 +51,300 @@ func Execute() {
 		fmt.Fprintf(os.Stderr, "Error executing CLI: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func computeDelta(base, target []byte) []byte {
+	// Delta format:
+	// - First 4 bytes: size of source (base) content
+	// - Next 4 bytes: size of target content
+	// - Followed by a series of instructions (copy or insert)
+
+	result := new(bytes.Buffer)
+
+	// Write source size (base content size)
+	binary.Write(result, binary.LittleEndian, uint32(len(base)))
+
+	// Write target size
+	binary.Write(result, binary.LittleEndian, uint32(len(target)))
+
+	// Compute the operations needed to transform base into target
+	// This is a simplified implementation of the delta algorithm
+	// A real implementation would use a more efficient algorithm to find common substrings
+	ops := computeDeltaOperations(base, target)
+
+	// Write operations to the delta
+	for _, op := range ops {
+		if op.IsCopy {
+			// Copy instruction starts with a byte where:
+			// MSB is 1, followed by which of the next 4 bytes are present for offset and size
+			// Then follow the offset and size bytes
+			cmd := byte(0x80) // Set MSB to 1 for copy
+
+			// Determine which bytes we need for offset
+			offsetBytes := make([]byte, 0, 4)
+			tempOffset := op.Offset
+			for i := 0; i < 4; i++ {
+				if tempOffset > 0 || i == 0 {
+					offsetBytes = append(offsetBytes, byte(tempOffset&0xFF))
+					tempOffset >>= 8
+					cmd |= (1 << i) // Set bit to indicate this byte is present
+				}
+			}
+
+			// Determine which bytes we need for size
+			sizeBytes := make([]byte, 0, 3)
+			tempSize := op.Size
+			for i := 0; i < 3; i++ {
+				if tempSize > 0 || i == 0 {
+					sizeBytes = append(sizeBytes, byte(tempSize&0xFF))
+					tempSize >>= 8
+					cmd |= (1 << (i + 4)) // Offset by 4 to use the size bits
+				}
+			}
+
+			// Write the command byte
+			result.WriteByte(cmd)
+
+			// Write offset bytes
+			result.Write(offsetBytes)
+
+			// Write size bytes
+			result.Write(sizeBytes)
+		} else {
+			// Insert instruction:
+			// Single byte with size (max 127 bytes per insert)
+			// For larger inserts, split into multiple instructions
+
+			data := op.Data
+			for len(data) > 0 {
+				chunkSize := len(data)
+				if chunkSize > 127 {
+					chunkSize = 127
+				}
+
+				// Write size byte (0-127)
+				result.WriteByte(byte(chunkSize))
+
+				// Write the data
+				result.Write(data[:chunkSize])
+
+				// Move to next chunk
+				data = data[chunkSize:]
+			}
+		}
+	}
+
+	return result.Bytes()
+}
+
+func computeDeltaOperations(base, target []byte) []DeltaOperation {
+	// This is a simplified approach. A real implementation would use
+	// rolling hashes or suffix arrays for more efficient matching.
+
+	var operations []DeltaOperation
+	targetIndex := 0
+
+	for targetIndex < len(target) {
+		// Try to find a matching sequence in base
+		bestMatchLen := 0
+		bestMatchOffset := 0
+
+		// Look for longest matching sequence
+		// For simplicity, we use a brute force approach
+		// A real implementation would use a more efficient algorithm
+		if len(target)-targetIndex >= 4 { // Only look for matches of at least 4 bytes
+			for baseIndex := 0; baseIndex < len(base); baseIndex++ {
+				// Calculate max possible match length from this position
+				maxMatchLen := 0
+				for i := 0; i < min(len(base)-baseIndex, len(target)-targetIndex); i++ {
+					if base[baseIndex+i] == target[targetIndex+i] {
+						maxMatchLen++
+					} else {
+						break
+					}
+				}
+
+				// If this match is better than our previous best, update
+				if maxMatchLen > bestMatchLen {
+					bestMatchLen = maxMatchLen
+					bestMatchOffset = baseIndex
+				}
+			}
+		}
+
+		if bestMatchLen >= 4 { // Only use copy if match is at least 4 bytes
+			// Add a copy operation
+			operations = append(operations, DeltaOperation{
+				IsCopy: true,
+				Offset: bestMatchOffset,
+				Size:   bestMatchLen,
+			})
+			targetIndex += bestMatchLen
+		} else {
+			// Find how many bytes don't match
+			insertStart := targetIndex
+			for targetIndex < len(target) {
+				// Check if we can find a match of at least 4 bytes
+				if targetIndex+4 <= len(target) {
+					found := false
+					for baseIndex := 0; baseIndex < len(base); baseIndex++ {
+						if baseIndex+4 <= len(base) {
+							matches := 0
+							for i := 0; i < 4; i++ {
+								if base[baseIndex+i] == target[targetIndex+i] {
+									matches++
+								} else {
+									break
+								}
+							}
+							if matches == 4 {
+								found = true
+								break
+							}
+						}
+					}
+					if found {
+						break
+					}
+				}
+				targetIndex++
+				if targetIndex-insertStart >= 127 {
+					// Maximum insert size in one operation, break here
+					break
+				}
+			}
+
+			// Add an insert operation
+			operations = append(operations, DeltaOperation{
+				IsCopy: false,
+				Data:   target[insertStart:targetIndex],
+			})
+		}
+	}
+
+	return operations
+}
+
+func applyDelta(base, delta []byte) ([]byte, error) {
+	if len(delta) < 8 {
+		return nil, fmt.Errorf("delta too short")
+	}
+
+	// Read source size from first 4 bytes
+	srcSize := binary.LittleEndian.Uint32(delta[0:4])
+	if int(srcSize) != len(base) {
+		return nil, fmt.Errorf("base size mismatch: expected %d, got %d", srcSize, len(base))
+	}
+
+	// Read target size from next 4 bytes
+	targetSize := binary.LittleEndian.Uint32(delta[4:8])
+
+	// Allocate result buffer
+	result := make([]byte, 0, targetSize)
+
+	// Process delta instructions
+	i := 8 // Start after the header
+	for i < len(delta) {
+		cmd := delta[i]
+		i++
+
+		if cmd == 0 {
+			// Reserved for future use
+			return nil, fmt.Errorf("unexpected delta command 0")
+		} else if cmd&0x80 != 0 {
+			// Copy operation (MSB is set)
+			offset := 0
+			size := 0
+
+			// Read offset (if corresponding bit is set)
+			for j := 0; j < 4; j++ {
+				if cmd&(1<<j) != 0 {
+					offset |= int(delta[i]) << (j * 8)
+					i++
+				}
+			}
+
+			// Read size (if corresponding bit is set)
+			for j := 0; j < 3; j++ {
+				if cmd&(1<<(j+4)) != 0 {
+					size |= int(delta[i]) << (j * 8)
+					i++
+				}
+			}
+
+			// If size is 0, use a special case of 0x10000
+			if size == 0 {
+				size = 0x10000
+			}
+
+			// Validate offset and size
+			if offset+size > len(base) {
+				return nil, fmt.Errorf("invalid copy operation: offset=%d, size=%d, base_len=%d",
+					offset, size, len(base))
+			}
+
+			// Copy data from base
+			result = append(result, base[offset:offset+size]...)
+		} else {
+			// Insert operation (copy from delta)
+			size := int(cmd)
+			if i+size > len(delta) {
+				return nil, fmt.Errorf("invalid insert operation: size=%d, remaining=%d",
+					size, len(delta)-i)
+			}
+
+			// Copy data from delta
+			result = append(result, delta[i:i+size]...)
+			i += size
+		}
+	}
+
+	// Verify we produced the expected target size
+	if len(result) != int(targetSize) {
+		return nil, fmt.Errorf("result size mismatch: expected %d, got %d", targetSize, len(result))
+	}
+
+	return result, nil
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func writeDeltaObject(baseObjID string, delta []byte) (string, error) {
+	// Format: "delta <base-sha> <size>\0<delta-data>"
+	header := fmt.Sprintf("delta %s %d\u0000", baseObjID, len(delta))
+	store := append([]byte(header), delta...)
+
+	// Compute SHA of the combined content
+	hash := sha1.Sum(store)
+	sha := fmt.Sprintf("%x", hash)
+
+	// Build path to store the delta object
+	dir := sha[:2]
+	name := sha[2:]
+	objPath := filepath.Join(".nut", "objects", dir, name)
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
+		return "", fmt.Errorf("error creating object directory: %w", err)
+	}
+
+	// Compress and write the object
+	var buf bytes.Buffer
+	w := zlib.NewWriter(&buf)
+	_, _ = w.Write(store)
+	w.Close()
+
+	if err := os.WriteFile(objPath, buf.Bytes(), 0644); err != nil {
+		return "", fmt.Errorf("error writing delta object: %w", err)
+	}
+
+	return sha, nil
 }
 
 // Command to create a new database
@@ -63,6 +374,125 @@ var createDBCmd = &cobra.Command{
 		}
 
 		fmt.Println("Database created successfully!")
+	},
+}
+
+var packObjectsCmd = &cobra.Command{
+	Use:   "pack <dbID>",
+	Short: "Pack loose objects into a packfile",
+	Long:  "This command packs loose objects in the repository into a packfile to save space",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbID := args[0]
+		basePath := filepath.Join(".", "files", dbID)
+
+		// Change to the database directory
+		if err := os.Chdir(basePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error changing directory: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Create a packfile
+		packID := time.Now().Format("20060102-150405")
+		packName := fmt.Sprintf("pack-%s", packID)
+		packPath := filepath.Join(".nut", "objects", "pack")
+
+		// Ensure pack directory exists
+		if err := os.MkdirAll(packPath, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating pack directory: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Find all loose objects
+		objectsDir := filepath.Join(".nut", "objects")
+		var objects []string
+
+		// Walk the objects directory to find loose objects
+		err := filepath.Walk(objectsDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			// Skip directories and pack files
+			if info.IsDir() || strings.Contains(path, "pack") {
+				return nil
+			}
+
+			// Get the object ID from the path
+			dir := filepath.Base(filepath.Dir(path))
+			file := filepath.Base(path)
+			if len(dir) == 2 && len(file) == 38 {
+				objects = append(objects, dir+file)
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error scanning objects: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(objects) == 0 {
+			fmt.Println("No loose objects found to pack")
+			return
+		}
+
+		fmt.Printf("Found %d objects to pack\n", len(objects))
+
+		// Sort objects by type and then by path to improve delta compression
+		// In a real implementation, you'd sort them in a way that maximizes delta compression
+
+		// Create a packfile
+		packFile, err := os.Create(filepath.Join(packPath, packName+".pack"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating packfile: %v\n", err)
+			os.Exit(1)
+		}
+		defer packFile.Close()
+
+		// Write pack header: "PACK" signature, version (2), and number of objects
+		packFile.Write([]byte("PACK"))
+		binary.Write(packFile, binary.BigEndian, uint32(2)) // Version
+		binary.Write(packFile, binary.BigEndian, uint32(len(objects)))
+
+		// Create index file
+		indexFile, err := os.Create(filepath.Join(packPath, packName+".idx"))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating index file: %v\n", err)
+			os.Exit(1)
+		}
+		defer indexFile.Close()
+
+		// Write index header: the format depends on your implementation
+		// For simplicity, we'll use a simple format: list of (sha, offset) pairs
+
+		// Process objects
+		for i, objID := range objects {
+			// Read the object
+			objData := readObject(objID)
+
+			// Record the offset in the packfile
+			offset, _ := packFile.Seek(0, io.SeekCurrent)
+
+			// Write the object to the packfile
+			// In a real implementation, you'd use delta compression between objects
+			// For simplicity, we'll just write them as-is
+			packFile.Write(objData)
+
+			// Write the index entry
+			binary.Write(indexFile, binary.BigEndian, objID)
+			binary.Write(indexFile, binary.BigEndian, uint64(offset))
+
+			if i%100 == 0 {
+				fmt.Printf("Packed %d/%d objects\n", i, len(objects))
+			}
+		}
+
+		fmt.Printf("Successfully packed %d objects into %s\n", len(objects), packName)
+
+		// In a real implementation, you'd add an option to remove the loose objects
+		// after successful packing
 	},
 }
 
@@ -523,26 +953,165 @@ func hashAndWriteBlob(filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// First, compute the regular blob object hash
 	header := fmt.Sprintf("blob %d\u0000", len(content))
 	store := append([]byte(header), content...)
 	hash := sha1.Sum(store)
 	sha := fmt.Sprintf("%x", hash)
+
+	// Check if this object already exists
 	dir := sha[:2]
 	name := sha[2:]
 	objPath := filepath.Join(".nut", "objects", dir, name)
-	if _, err := os.Stat(objPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
-			return "", err
-		}
-		var buf bytes.Buffer
-		w := zlib.NewWriter(&buf)
-		_, _ = w.Write(store)
-		w.Close()
-		if err := os.WriteFile(objPath, buf.Bytes(), 0644); err != nil {
-			return "", err
+	if _, err := os.Stat(objPath); err == nil {
+		// Object already exists, just return its SHA
+		return sha, nil
+	}
+
+	// Find a similar object to use as a base for delta compression
+	baseObjID, baseContent := findSimilarObject(content)
+
+	if baseObjID != "" {
+		// Compute delta
+		delta := computeDelta(baseContent, content)
+
+		// If delta is smaller than the original content (with some margin)
+		if len(delta) < len(content)*9/10 {
+			// Store as a delta object
+			deltaSha, err := writeDeltaObject(baseObjID, delta)
+			if err != nil {
+				// Fall back to direct storage on error
+				fmt.Fprintf(os.Stderr, "Warning: failed to write delta: %v\n", err)
+			} else {
+				return deltaSha, nil
+			}
 		}
 	}
+
+	// If we reach here, either no suitable base was found or delta wasn't efficient
+	// Fall back to storing the full object
+	if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
+		return "", err
+	}
+
+	var buf bytes.Buffer
+	w := zlib.NewWriter(&buf)
+	_, _ = w.Write(store)
+	w.Close()
+
+	if err := os.WriteFile(objPath, buf.Bytes(), 0644); err != nil {
+		return "", err
+	}
+
 	return sha, nil
+}
+
+func findSimilarObject(content []byte) (string, []byte) {
+	// This is a simplified approach. A real implementation would index objects
+	// by size or use other heuristics to find similar files quickly.
+	objectsDir := filepath.Join(".nut", "objects")
+
+	// Look for blob objects only
+	var bestMatch string
+	var bestContent []byte
+	var bestSimilarity float64
+
+	// Walk the objects directory
+	filepath.Walk(objectsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || len(filepath.Base(path)) != 38 {
+			return nil // Skip directories and non-object files
+		}
+
+		// Read the object
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+
+		// Decompress the object
+		r, err := zlib.NewReader(bytes.NewReader(data))
+		if err != nil {
+			return nil
+		}
+		defer r.Close()
+
+		objData, err := io.ReadAll(r)
+		if err != nil {
+			return nil
+		}
+
+		// Check if it's a blob object
+		parts := bytes.SplitN(objData, []byte{0}, 2)
+		if len(parts) != 2 || !bytes.HasPrefix(parts[0], []byte("blob ")) {
+			return nil
+		}
+
+		objContent := parts[1]
+
+		// Skip if sizes are too different
+		if len(objContent) < len(content)/2 || len(objContent) > len(content)*2 {
+			return nil
+		}
+
+		// Calculate similarity (simplified approach)
+		// In a real implementation, you'd use a more sophisticated algorithm
+		similarity := calculateSimilarity(objContent, content)
+
+		if similarity > bestSimilarity && similarity > 0.6 { // 60% similarity threshold
+			dir := filepath.Base(filepath.Dir(path))
+			file := filepath.Base(path)
+			bestMatch = dir + file
+			bestContent = objContent
+			bestSimilarity = similarity
+		}
+
+		return nil
+	})
+
+	return bestMatch, bestContent
+}
+
+func calculateSimilarity(a, b []byte) float64 {
+	// This is a simplistic implementation. A real one would use better metrics.
+	// For example, you might use Jaccard similarity on n-grams or other methods.
+
+	// For this demo, we'll just sample bytes at regular intervals
+	sampleSize := 100
+	sampleCount := 0
+	matchCount := 0
+
+	// Skip if either is too small
+	if len(a) < 10 || len(b) < 10 {
+		return 0
+	}
+
+	// Sample at regular intervals
+	stepA := max(1, len(a)/sampleSize)
+	stepB := max(1, len(b)/sampleSize)
+
+	for i := 0; i < min(len(a), sampleSize*stepA); i += stepA {
+		for j := 0; j < min(len(b), sampleSize*stepB); j += stepB {
+			sampleCount++
+			if a[i] == b[j] {
+				matchCount++
+			}
+		}
+	}
+
+	if sampleCount == 0 {
+		return 0
+	}
+
+	return float64(matchCount) / float64(sampleCount)
+}
+
+// max returns the maximum of two integers
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // New Restore Command
@@ -634,7 +1203,7 @@ var restoreCmd = &cobra.Command{
 func restoreCommit(commitSha string) {
 	data := readObject(commitSha)
 
-	// Find the first null byte to separate header from content.
+	// Find the first null byte to separate header from content
 	nullIndex := bytes.IndexByte(data, 0)
 	if nullIndex == -1 {
 		fmt.Fprintf(os.Stderr, "Invalid commit object: missing null byte\n")
@@ -648,13 +1217,13 @@ func restoreCommit(commitSha string) {
 	}
 	treeSha := string(bytes.TrimPrefix(lines[0], []byte("tree ")))
 
-	// Load ignore patterns.
+	// Load ignore patterns
 	ignores, _ := loadGitignore()
 
-	// Clean the current directory, preserving .nut and .nutignore.
+	// Clean the current directory, preserving .nut and .nutignore
 	cleanCurrentDirectory(ignores)
 
-	// Restore the tree.
+	// Restore the tree - this will now handle delta objects through the readObject function
 	restoreTree(treeSha, ".", "", ignores)
 
 	fmt.Printf("Restored to commit %s\n", commitSha)
@@ -682,17 +1251,75 @@ func readObject(sha string) []byte {
 		fmt.Fprintf(os.Stderr, "Error reading object file: %v\n", err)
 		os.Exit(1)
 	}
+
 	r, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating zlib reader: %v\n", err)
 		os.Exit(1)
 	}
 	defer r.Close()
+
 	decompressedData, err := io.ReadAll(r)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error decompressing data: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Check if this is a delta object
+	if bytes.HasPrefix(decompressedData, []byte("delta ")) {
+		// Parse the header to get base object ID and delta size
+		nullIdx := bytes.IndexByte(decompressedData, 0)
+		if nullIdx == -1 {
+			fmt.Fprintf(os.Stderr, "Invalid delta object: missing null byte\n")
+			os.Exit(1)
+		}
+
+		header := string(decompressedData[:nullIdx])
+		parts := strings.Fields(header)
+		if len(parts) != 3 {
+			fmt.Fprintf(os.Stderr, "Invalid delta header: %s\n", header)
+			os.Exit(1)
+		}
+
+		baseObjID := parts[1]
+
+		// Get the delta data
+		deltaData := decompressedData[nullIdx+1:]
+
+		// Get the base object
+		baseObj := readObject(baseObjID)
+
+		// Extract the content from the base object
+		baseNullIdx := bytes.IndexByte(baseObj, 0)
+		if baseNullIdx == -1 {
+			fmt.Fprintf(os.Stderr, "Invalid base object: missing null byte\n")
+			os.Exit(1)
+		}
+		baseContent := baseObj[baseNullIdx+1:]
+
+		// Apply the delta
+		resultContent, err := applyDelta(baseContent, deltaData)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error applying delta: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Reconstruct the object with proper header
+		// We need to determine the original object type from the base object
+		baseHeader := string(baseObj[:baseNullIdx])
+		baseParts := strings.Fields(baseHeader)
+		if len(baseParts) < 1 {
+			fmt.Fprintf(os.Stderr, "Invalid base object header: %s\n", baseHeader)
+			os.Exit(1)
+		}
+
+		objType := baseParts[0]
+		objHeader := fmt.Sprintf("%s %d", objType, len(resultContent))
+
+		return append([]byte(objHeader+"\u0000"), resultContent...)
+	}
+
+	// Not a delta object, return as-is
 	return decompressedData
 }
 
@@ -775,4 +1402,6 @@ func init() {
 	rootCmd.AddCommand(handleCommitAllCmd)
 	handleCommitAllCmd.Flags().StringVarP(&commitMessage, "message", "m", "", "Commit message")
 	rootCmd.AddCommand(restoreCmd)
+	rootCmd.AddCommand(packObjectsCmd)
+
 }
