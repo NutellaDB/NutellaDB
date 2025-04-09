@@ -24,7 +24,7 @@ func (c *Collection) InsertKV(key string, value interface{}) {
 }
 
 // FindKey wraps the btree find
-func (c *Collection) FindKey(key string) {
+func (c *Collection) FindKey(key string) (interface{}, bool) {
 	val, found, err := c.btree.Find(key)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to find key %s in collection %s: %v", key, c.name, err))
@@ -34,6 +34,7 @@ func (c *Collection) FindKey(key string) {
 	} else {
 		fmt.Printf("Key not found: %s (in collection: %s)\n", key, c.name)
 	}
+	return val, found
 }
 
 // UpdateKV wraps the btree update

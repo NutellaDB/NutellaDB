@@ -1,132 +1,106 @@
 package main
 
 import (
-	"db/cache"
-	"db/database"
-	"db/cli"
+	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
-
-	"github.com/google/uuid"
+	"net/http"
+	"db/database"
 )
 
-func main() {
-	dbUUID, err := uuid.NewRandom()
-	if err != nil {
-		log.Fatalf("failed to generate uuid: %v", err)
-	}
-	dbSuffix := strings.Split(dbUUID.String(), "-")[0] // grab first segment
-	dbID := fmt.Sprintf("db_%s", dbSuffix)
-	fmt.Println("Database ID:", dbID)
+var db, err = database.NewDatabase("./", "uid__")
 
-	basePath := filepath.Join(".", "files", dbID)
-
-	// cleanup old stuff first
-	os.RemoveAll(basePath)
-
-	db, err := database.NewDatabase(basePath, dbID)
-	if err != nil {
-		log.Fatalf("Error creating database: %v", err)
-	}
-
-	// set up fruits collection
-	if err := db.CreateCollection("fruits", 3); err != nil {
-		log.Fatalf("Error creating fruits collection: %v", err)
-	}
-	fruits, _ := db.GetCollection("fruits")
-	fruits.InsertKV("apple", "red fruit")
-	fruits.InsertKV("banana", "yellow fruit")
-	fruits.InsertKV("cherry", "small red fruit")
-	fruits.InsertKV("date", "sweet brown fruit")
-	fruits.InsertKV("elderberry", "dark purple berries")
-	fruits.InsertKV("fig", "sweet purple fruit")
-	fruits.InsertKV("grape", "small round fruit")
-	fruits.InsertKV("honeydew", "green melon")
-	fruits.InsertKV("kiwi", "fuzzy brown fruit")
-	fruits.InsertKV("lemon", "sour yellow citrus")
-	fruits.InsertKV("mango", "tropical orange fruit")
-	fruits.InsertKV("nectarine", "smooth peach")
-
-	// set up plants collection
-	if err := db.CreateCollection("plants", 3); err != nil {
-		log.Fatalf("Error creating plants collection: %v", err)
-	}
-	plants, _ := db.GetCollection("plants")
-	plants.InsertKV("aloe", "succulent plant")
-	plants.InsertKV("bamboo", "fast growing grass")
-	plants.InsertKV("cactus", "desert plant")
-	plants.InsertKV("daisy", "common flower")
-	plants.InsertKV("eucalyptus", "tall tree")
-	plants.InsertKV("fern", "leafy plant")
-	plants.InsertKV("ivy", "climbing plant")
-	plants.InsertKV("jasmine", "fragrant flower")
-	plants.InsertKV("lavender", "purple flower")
-	plants.InsertKV("mint", "aromatic herb")
-	plants.InsertKV("oak", "hardwood tree")
-	plants.InsertKV("palm", "tropical tree")
-	plants.InsertKV("rose", "thorny flower")
-	plants.InsertKV("sage", "herb plant")
-
-	// try finding some fruits
-	fmt.Println("\n-- Testing fruit lookups across pages --")
-	fruits.FindKey("apple")
-	fruits.FindKey("grape")
-	fruits.FindKey("mango")
-	fruits.FindKey("orange") // should fail
-
-	// try finding some plants
-	fmt.Println("\n-- Testing plant lookups across pages --")
-	plants.FindKey("aloe")
-	plants.FindKey("jasmine")
-	plants.FindKey("sage")
-	plants.FindKey("zinnia") // should fail
-
-	// cleanup
-	if err := db.Close(); err != nil {
-		log.Fatalf("Error closing database: %v", err)
-	}
-	fmt.Println("\nDatabase closed successfully.")
-
-	// reopen and verify data persisted
-	fmt.Println("\nRe-opening database:", dbID)
-	db2, err := database.LoadDatabase(basePath)
-	if err != nil {
-		log.Fatalf("Error loading database: %v", err)
-	}
-
-	// check fruits still there
-	fruitsAgain, err := db2.GetCollection("fruits")
-	if err != nil {
-		log.Fatalf("Error loading fruits collection: %v", err)
-	}
-	fmt.Println("\n-- Verifying fruits data after reopen --")
-	fruitsAgain.FindKey("apple")
-	fruitsAgain.FindKey("honeydew")
-	fruitsAgain.FindKey("nectarine")
-
-	// check plants still there
-	plantsAgain, err := db2.GetCollection("plants")
-	if err != nil {
-		log.Fatalf("Error loading plants collection: %v", err)
-	}
-	fmt.Println("\n-- Verifying plants data after reopen --")
-	plantsAgain.FindKey("bamboo")
-	plantsAgain.FindKey("lavender")
-	plantsAgain.FindKey("sage")
-
-	// final cleanup
-	if err := db2.Close(); err != nil {
-		log.Fatalf("Error closing database again: %v", err)
-	}
-
-	fmt.Println("\nAll done!")
-
-	cache.CreateCache(basePath)
-	
-	cli.Execute()
+type Request struct {
+	Type       string `json:"type"`
+	Collection string `json:"collection,omitempty"`
+	Key        string `json:"key,omitempty"`
+	Value      string `json:"value,omitempty"`
 }
 
+func queryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Only POST method is supported", http.StatusMethodNotAllowed)
+		return
+	}
 
+	var req Request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+
+	switch req.Type {
+	case "create_collection":
+		col := db.CreateCollection(req.Collection, 3)
+		if col != nil {
+			json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Collection created"})
+		} else {
+			http.Error(w, "Collection creation failed", http.StatusInternalServerError)
+		}
+
+	// case "delete_collection":
+	// 	err := db.DeleteCollection(req.Collection)
+	// 	if err != nil {
+	// 		http.Error(w, "Failed to delete collection", http.StatusInternalServerError)
+	// 		return
+	// 	}
+	// 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Collection deleted"})
+
+	case "get":
+		col, err := db.GetCollection(req.Collection)
+		if err != nil {
+			http.Error(w, "Collection not found", http.StatusNotFound)
+			return
+		}
+		val, found := col.FindKey(req.Key)
+		if !found {
+			http.Error(w, "Key not found", http.StatusNotFound)
+			return
+		}
+		if strVal, ok := val.(string); ok {
+			json.NewEncoder(w).Encode(map[string]string{"value": strVal})
+		} else {
+			http.Error(w, "Value is not a string", http.StatusInternalServerError)
+		}
+
+	case "set":
+		col, err := db.GetCollection(req.Collection)
+		if err != nil {
+			http.Error(w, "Collection not found", http.StatusNotFound)
+			return
+		}
+		col.InsertKV(req.Key, req.Value)
+		json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Value set"})
+
+	case "delete":
+		col, err := db.GetCollection(req.Collection)
+		if err != nil {
+			http.Error(w, "Collection not found", http.StatusNotFound)
+			return
+		}
+		col.InsertKV(req.Key, "") // todo: use DeleteKey()
+		json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Key deleted"})
+
+	// case "retrieve_all_keys":
+	// 	col, err := db.GetCollection(req.Collection)
+	// 	if err != nil {
+	// 		http.Error(w, "Collection not found", http.StatusNotFound)
+	// 		return
+	// 	}
+	// 	keys := col.GetAllKeys()
+	// 	json.NewEncoder(w).Encode(map[string]any{"keys": keys})
+
+	default:
+		http.Error(w, "Unsupported request type", http.StatusBadRequest)
+	}
+}
+
+func main() {
+	// check()
+	if err != nil {
+		fmt.Println("DB creation failed %v", err)
+	}
+	http.HandleFunc("/query", queryHandler)
+	fmt.Println("NutellaDB server is running on port 8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
+}

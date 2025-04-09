@@ -1,0 +1,15 @@
+{
+  "id": 1,
+  "is_leaf": true,
+  "keys": [
+    {
+      "key": "book_1",
+      "value": "Kafka on the Shore"
+    },
+    {
+      "key": "book_2",
+      "value": "Crime and Punishment"
+    }
+  ],
+  "children": []
+}
