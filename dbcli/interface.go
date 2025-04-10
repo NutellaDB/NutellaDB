@@ -1,4 +1,4 @@
-package cli
+package dbcli
 
 import (
 	"bytes"
@@ -658,6 +658,14 @@ var handleInitCmd = &cobra.Command{
 		handleInit(basePath)
 	},
 }
+
+// var handleStartServer = &cobra.Command{
+// 	Use:   "startserver",
+// 	Short: "Start the NutellaDB server",
+// 	// koi API docs likhdo
+// 	Long: "Starts the NutellaDB server as an API [see /docs for API documentation]",
+// 	Run:  server.Server,
+// }
 
 func handleInit(basePath string) {
 	// Create the .nut folder within the basePath

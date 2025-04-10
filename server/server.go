@@ -1,14 +1,15 @@
-package main
+package server
 
 import (
 	"bytes"
 	"db/btree"
-	"db/cli"
 	"db/database"
+	cli "db/dbcli"
 	"log"
 	"path/filepath"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/spf13/cobra"
 )
 
 func runCLI(args []string) (string, error) {
@@ -45,7 +46,7 @@ func getDB(dbID string, createIfMissing bool) (*database.Database, error) {
 	return db, nil
 }
 
-func main() {
+func Server(cmd *cobra.Command) {
 	app := fiber.New()
 
 	app.Get("/api/databases", func(c *fiber.Ctx) error {
