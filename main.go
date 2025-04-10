@@ -21,5 +21,8 @@ var RootCmd = &cobra.Command{
 }
 
 func main() {
+	var commitMessage string
+	dbcli.Init()
+	RootCmd.Flags().StringVarP(&commitMessage, "message", "m", "", "Commit message")
 	RootCmd.Execute()
 }

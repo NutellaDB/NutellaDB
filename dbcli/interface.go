@@ -1398,7 +1398,7 @@ func restoreTree(treeSha, restorePath, repoRel string, ignores []string) {
 	}
 }
 
-func init() {
+func Init() {
 	RootCmd.AddCommand(createDBCmd)
 	RootCmd.AddCommand(createCollectionCmd)
 	RootCmd.AddCommand(insertCmd)
