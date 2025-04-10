@@ -709,7 +709,7 @@ var handleCommitAllCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		sha, err := createAndStoreCommit(treeSha, commitMessage)
+		sha, msg, err := createAndStoreCommit(treeSha, commitMessage)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error storing commit: %s\n", err)
 			os.Exit(1)
@@ -722,12 +722,13 @@ var handleCommitAllCmd = &cobra.Command{
 		}
 
 		fmt.Println(sha)
+		fmt.Println(msg)
 	},
 }
 
 // createAndStoreCommit creates a commit object with the given tree SHA and commit message.
 // It returns the computed commit hash.
-func createAndStoreCommit(treeSha, message string) (string, error) {
+func createAndStoreCommit(treeSha, message string) (string, string, error) {
 	commitContent := fmt.Sprintf("tree %s\n\n%s\n", treeSha, message)
 	header := fmt.Sprintf("commit %d\u0000", len(commitContent))
 	store := append([]byte(header), []byte(commitContent)...)
@@ -739,8 +740,8 @@ func createAndStoreCommit(treeSha, message string) (string, error) {
 	name := sha[2:]
 	path := filepath.Join(".nutella", "objects", dir, name)
 
-	if err := os.MkdirAll(filepath.Join(".nutella", "objects", dir), 0755); err != nil {
-		return "", fmt.Errorf("Error creating commit directory: %w", err)
+	if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
+		return "", "", fmt.Errorf("Error creating commit directory: %w", err)
 	}
 
 	var buf bytes.Buffer
@@ -749,9 +750,9 @@ func createAndStoreCommit(treeSha, message string) (string, error) {
 	w.Close()
 
 	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
-		return "", fmt.Errorf("Error writing commit: %w", err)
+		return "", "", fmt.Errorf("Error writing commit: %w", err)
 	}
-	return sha, nil
+	return sha, message, nil
 }
 
 // Snapshot represents a single commit snapshot.
