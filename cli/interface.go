@@ -384,7 +384,7 @@ var packObjectsCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dbID := args[0]
-		basePath := filepath.Join(".", "files", dbID)
+		basePath, _ := filepath.Abs(filepath.Join("files", dbID))
 
 		// Change to the database directory
 		if err := os.Chdir(basePath); err != nil {
@@ -709,11 +709,10 @@ var handleCommitAllCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		dbID := args[0]
-		basePath := filepath.Join(".", "files", dbID)
-		repoGitDir := filepath.Join(basePath, ".nut")
+		basePath, _ := filepath.Abs(filepath.Join("files", dbID))
 
 		// Verify that the repository exists.
-		if _, err := os.Stat(repoGitDir); os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(basePath, ".nut")); os.IsNotExist(err) {
 			fmt.Fprintf(os.Stderr, "Error: repository not found at %s. Please run 'init' first.\n", basePath)
 			os.Exit(1)
 		}
