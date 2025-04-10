@@ -15,7 +15,7 @@ import (
 /*
  * main.go
  *
- * This is a simplified implementation of core Git commands in Go.
+ * This is a simplified implementation of core nutella commands in Go.
  * In addition to existing commands, this version supports a new command:
  *   - commit-all: Recursively hashes all files (skipping files matching .gitignore)
  *                 then creates a tree and commit object in one go.
@@ -32,7 +32,7 @@ import (
  *   mygit commit-all -m "<message>"
  *     - This command will:
  *         1. Load ignore patterns from .gitignore (if it exists)
- *         2. Recursively hash all files (ignoring .git and matching ignore patterns)
+ *         2. Recursively hash all files (ignoring .nutella and matching ignore patterns)
  *         3. Write the tree object for the entire directory structure
  *         4. Create a commit object using the given commit message.
  */
@@ -111,16 +111,16 @@ func handleCommitAll() {
 }
 
 func handleInit() {
-	for _, dir := range []string{".git", ".git/objects", ".git/refs"} {
+	for _, dir := range []string{".nutella", ".nutella/objects", ".nutella/refs"} {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating directory: %s\n", err)
 		}
 	}
 	headFileContents := []byte("ref: refs/heads/main\n")
-	if err := os.WriteFile(".git/HEAD", headFileContents, 0644); err != nil {
+	if err := os.WriteFile(".nutella/HEAD", headFileContents, 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing file: %s\n", err)
 	}
-	fmt.Println("Initialized git directory")
+	fmt.Println("Initialized nutella directory")
 
 }
 
@@ -132,12 +132,12 @@ func createAndStoreCommit(treeSha, message string) {
 	hash := sha1.Sum(store)
 	sha := fmt.Sprintf("%x", hash)
 
-	// Store commit in .git/objects
+	// Store commit in .nutella/objects
 	dir := sha[:2]
 	name := sha[2:]
-	path := fmt.Sprintf(".git/objects/%s/%s", dir, name)
+	path := fmt.Sprintf(".nutella/objects/%s/%s", dir, name)
 
-	if err := os.MkdirAll(fmt.Sprintf(".git/objects/%s", dir), 0755); err != nil {
+	if err := os.MkdirAll(fmt.Sprintf(".nutella/objects/%s", dir), 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating commit directory: %s\n", err)
 		os.Exit(1)
 	}
@@ -220,8 +220,8 @@ func writeTreeRecursive(root, dir string, ignores []string) (string, error) {
 	}
 
 	for _, f := range files {
-		// Ignore the .git folder.
-		if f.Name() == ".git" {
+		// Ignore the .nutella folder.
+		if f.Name() == ".nutella" {
 			continue
 		}
 		// Compute the relative path from repo root.
@@ -268,7 +268,7 @@ func writeTreeRecursive(root, dir string, ignores []string) (string, error) {
 	shaStr := fmt.Sprintf("%x", hash)
 	dirName := shaStr[:2]
 	fileName := shaStr[2:]
-	objPath := fmt.Sprintf(".git/objects/%s/%s", dirName, fileName)
+	objPath := fmt.Sprintf(".nutella/objects/%s/%s", dirName, fileName)
 
 	if err := os.MkdirAll(filepath.Dir(objPath), 0755); err != nil {
 		return "", err
@@ -291,7 +291,7 @@ func handleCatFile() {
 	sha_addr := os.Args[3]
 	dir := sha_addr[:2]
 	name := sha_addr[2:]
-	path := fmt.Sprintf(".git/objects/%s/%s", dir, name)
+	path := fmt.Sprintf(".nutella/objects/%s/%s", dir, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading object file: %s\n", err)
@@ -311,7 +311,7 @@ func handleCatFile() {
 	}
 	nullIndex := bytes.IndexByte(decompressedData, 0)
 	if nullIndex == -1 {
-		fmt.Fprintf(os.Stderr, "Invalid Git object format: missing null byte\n")
+		fmt.Fprintf(os.Stderr, "Invalid nutella object format: missing null byte\n")
 		os.Exit(1)
 	}
 	content := decompressedData[nullIndex+1:]
@@ -329,7 +329,7 @@ func hashFile(filename string, write bool) {
 	hash := sha1.Sum(store)
 	hashStr := fmt.Sprintf("%x", hash)
 	if write {
-		dir := fmt.Sprintf(".git/objects/%s", hashStr[:2])
+		dir := fmt.Sprintf(".nutella/objects/%s", hashStr[:2])
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating object directory: %s \n", err)
 			os.Exit(1)
@@ -370,7 +370,7 @@ func handleLsTree() {
 	}
 	dir := sha[:2]
 	name := sha[2:]
-	path := fmt.Sprintf(".git/objects/%s/%s", dir, name)
+	path := fmt.Sprintf(".nutella/objects/%s/%s", dir, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading tree object: %s\n", err)
@@ -390,7 +390,7 @@ func handleLsTree() {
 	}
 	nullIndex := bytes.IndexByte(decompressed, 0)
 	if nullIndex == -1 {
-		fmt.Fprintf(os.Stderr, "Invalid Git object format: missing null byte\n")
+		fmt.Fprintf(os.Stderr, "Invalid nutella object format: missing null byte\n")
 		os.Exit(1)
 	}
 	data = decompressed[nullIndex+1:]
@@ -437,9 +437,9 @@ func hashAndWriteBlob(filename string) (string, error) {
 	sha := fmt.Sprintf("%x", hash)
 	dir := sha[:2]
 	name := sha[2:]
-	path := fmt.Sprintf(".git/objects/%s/%s", dir, name)
+	path := fmt.Sprintf(".nutella/objects/%s/%s", dir, name)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if err := os.MkdirAll(fmt.Sprintf(".git/objects/%s", dir), 0755); err != nil {
+		if err := os.MkdirAll(fmt.Sprintf(".nutella/objects/%s", dir), 0755); err != nil {
 			return "", err
 		}
 		var buf bytes.Buffer
@@ -498,8 +498,8 @@ func cleanCurrentDirectory(ignores []string) {
 
 	for _, entry := range entries {
 		name := entry.Name()
-		// Always preserve .git and .gitignore.
-		if name == ".git" || name == ".gitignore" {
+		// Always preserve .nutella and .gitignore.
+		if name == ".nutella" || name == ".gitignore" {
 			continue
 		}
 		// If the entry name matches any ignore pattern, skip removal.
@@ -514,7 +514,7 @@ func cleanCurrentDirectory(ignores []string) {
 
 func readObject(sha string) []byte {
 	dir, name := sha[:2], sha[2:]
-	path := fmt.Sprintf(".git/objects/%s/%s", dir, name)
+	path := fmt.Sprintf(".nutella/objects/%s/%s", dir, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading object file: %s\n", err)

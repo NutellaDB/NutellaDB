@@ -172,7 +172,7 @@ func SetupRoutes(router fiber.Router) {
 		return c.JSON(fiber.Map{"status": "deleted (if key existed)"})
 	})
 
-	// Git-style routes
+	// nutella-style routes
 	router.Post("/init", func(c *fiber.Ctx) error {
 		var b struct {
 			DBID string `json:"dbID"`

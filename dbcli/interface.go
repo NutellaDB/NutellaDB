@@ -327,10 +327,10 @@ func writeDeltaObject(baseObjID string, delta []byte) (string, error) {
 	// Build path to store the delta object
 	dir := sha[:2]
 	name := sha[2:]
-	objPath := filepath.Join(".nut", "objects", dir, name)
+	objPath := filepath.Join(".nutella", "objects", dir, name)
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(".nutella", "objects", dir), 0755); err != nil {
 		return "", fmt.Errorf("error creating object directory: %w", err)
 	}
 
@@ -395,7 +395,7 @@ var packObjectsCmd = &cobra.Command{
 		// Create a packfile
 		packID := time.Now().Format("20060102-150405")
 		packName := fmt.Sprintf("pack-%s", packID)
-		packPath := filepath.Join(".nut", "objects", "pack")
+		packPath := filepath.Join(".nutella", "objects", "pack")
 
 		// Ensure pack directory exists
 		if err := os.MkdirAll(packPath, 0755); err != nil {
@@ -404,7 +404,7 @@ var packObjectsCmd = &cobra.Command{
 		}
 
 		// Find all loose objects
-		objectsDir := filepath.Join(".nut", "objects")
+		objectsDir := filepath.Join(".nutella", "objects")
 		var objects []string
 
 		// Walk the objects directory to find loose objects
@@ -640,11 +640,11 @@ var deleteCmd = &cobra.Command{
 	},
 }
 
-// Command to initialize a new Git-like repository inside a database folder.
+// Command to initialize a new nutella-like repository inside a database folder.
 var handleInitCmd = &cobra.Command{
 	Use:   "init [dbID]",
-	Short: "Initialize a new git directory",
-	Long:  "This command initializes a new git directory in the specified database folder.",
+	Short: "Initialize a new nutella directory",
+	Long:  "This command initializes a new nutella directory in the specified database folder.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		database.HandleInit(args[0])
@@ -669,7 +669,7 @@ var handleCommitAllCmd = &cobra.Command{
 	Long: `This command does the following:
   1. Uses the provided dbID to locate the repository at "./files/<dbID>".
   2. Loads ignore patterns from .nutignore.
-  3. Recursively hashes all files in the repository (ignoring .nut and matching ignore patterns).
+  3. Recursively hashes all files in the repository (ignoring .nutella and matching ignore patterns).
   4. Writes a tree object for the entire directory structure.
   5. Creates and stores a commit object with the provided commit message.
   6. Stores the resulting commit hash, commit message, and a timestamp in snapshots.json with a unique UUID key.`,
@@ -679,7 +679,7 @@ var handleCommitAllCmd = &cobra.Command{
 		basePath, _ := filepath.Abs(filepath.Join("files", dbID))
 
 		// Verify that the repository exists.
-		if _, err := os.Stat(filepath.Join(basePath, ".nut")); os.IsNotExist(err) {
+		if _, err := os.Stat(filepath.Join(basePath, ".nutella")); os.IsNotExist(err) {
 			fmt.Fprintf(os.Stderr, "Error: repository not found at %s. Please run 'init' first.\n", basePath)
 			os.Exit(1)
 		}
@@ -734,12 +734,12 @@ func createAndStoreCommit(treeSha, message string) (string, error) {
 	hash := sha1.Sum(store)
 	sha := fmt.Sprintf("%x", hash)
 
-	// Build path to store the commit object under .nut/objects.
+	// Build path to store the commit object under .nutella/objects.
 	dir := sha[:2]
 	name := sha[2:]
-	path := filepath.Join(".nut", "objects", dir, name)
+	path := filepath.Join(".nutella", "objects", dir, name)
 
-	if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(".nutella", "objects", dir), 0755); err != nil {
 		return "", fmt.Errorf("Error creating commit directory: %w", err)
 	}
 
@@ -761,11 +761,11 @@ type Snapshot struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// storeSnapshot updates the snapshots.json file (in the .nut folder) by adding
+// storeSnapshot updates the snapshots.json file (in the .nutella folder) by adding
 // a new entry keyed by a UUID containing the commit hash, commit message, and the current timestamp.
 func storeSnapshot(commitHash, commitMsg string) error {
 	// Since we've already changed to the repository base, use a relative path.
-	snapshotsPath := filepath.Join(".nut", "snapshots.json")
+	snapshotsPath := filepath.Join(".nutella", "snapshots.json")
 
 	// Read existing snapshots file.
 	var snapshots map[string]Snapshot
@@ -839,8 +839,8 @@ func writeTreeRecursive(root, dir string, ignores []string) (string, error) {
 	}
 
 	for _, f := range files {
-		// Ignore the .nut folder.
-		if f.Name() == ".nut" {
+		// Ignore the .nutella folder.
+		if f.Name() == ".nutella" {
 			continue
 		}
 		// Compute relative path from repo root.
@@ -885,7 +885,7 @@ func writeTreeRecursive(root, dir string, ignores []string) (string, error) {
 	shaStr := fmt.Sprintf("%x", hash)
 	dirName := shaStr[:2]
 	fileName := shaStr[2:]
-	objPath := filepath.Join(".nut", "objects", dirName, fileName)
+	objPath := filepath.Join(".nutella", "objects", dirName, fileName)
 
 	if err := os.MkdirAll(filepath.Dir(objPath), 0755); err != nil {
 		return "", err
@@ -929,7 +929,7 @@ func hashAndWriteBlob(filename string) (string, error) {
 	// Check if this object already exists
 	dir := sha[:2]
 	name := sha[2:]
-	objPath := filepath.Join(".nut", "objects", dir, name)
+	objPath := filepath.Join(".nutella", "objects", dir, name)
 	if _, err := os.Stat(objPath); err == nil {
 		// Object already exists, just return its SHA
 		return sha, nil
@@ -957,7 +957,7 @@ func hashAndWriteBlob(filename string) (string, error) {
 
 	// If we reach here, either no suitable base was found or delta wasn't efficient
 	// Fall back to storing the full object
-	if err := os.MkdirAll(filepath.Join(".nut", "objects", dir), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(".nutella", "objects", dir), 0755); err != nil {
 		return "", err
 	}
 
@@ -976,7 +976,7 @@ func hashAndWriteBlob(filename string) (string, error) {
 func findSimilarObject(content []byte) (string, []byte) {
 	// This is a simplified approach. A real implementation would index objects
 	// by size or use other heuristics to find similar files quickly.
-	objectsDir := filepath.Join(".nut", "objects")
+	objectsDir := filepath.Join(".nutella", "objects")
 
 	// Look for blob objects only
 	var bestMatch string
@@ -1086,7 +1086,7 @@ var restoreCmd = &cobra.Command{
 	Short: "Restore a database to a previous commit snapshot",
 	Long: `This command will:
   1. Change directory to the given database (./files/<dbname>).
-  2. Load snapshots stored in .nut/snapshots.json.
+  2. Load snapshots stored in .nutella/snapshots.json.
   3. Display the commit hash, commit message, and timestamp (sorted by time).
   4. Prompt for a commit hash to restore.
   5. Restore the working directory to that commit state.`,
@@ -1101,7 +1101,7 @@ var restoreCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		// Load snapshots from .nut/snapshots.json.
+		// Load snapshots from .nutella/snapshots.json.
 		snapshots, err := loadSnapshots()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading snapshots: %v\n", err)
@@ -1186,7 +1186,7 @@ func restoreCommit(commitSha string) {
 	// Load ignore patterns
 	ignores, _ := loadGitignore()
 
-	// Clean the current directory, preserving .nut and .nutignore
+	// Clean the current directory, preserving .nutella and .nutignore
 	cleanCurrentDirectory(ignores)
 
 	// Restore the tree - this will now handle delta objects through the readObject function
@@ -1195,9 +1195,9 @@ func restoreCommit(commitSha string) {
 	fmt.Printf("Restored to commit %s\n", commitSha)
 }
 
-// loadSnapshots reads snapshots from .nut/snapshots.json.
+// loadSnapshots reads snapshots from .nutella/snapshots.json.
 func loadSnapshots() (map[string]Snapshot, error) {
-	data, err := os.ReadFile(filepath.Join(".nut", "snapshots.json"))
+	data, err := os.ReadFile(filepath.Join(".nutella", "snapshots.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -1208,10 +1208,10 @@ func loadSnapshots() (map[string]Snapshot, error) {
 	return snapshots, nil
 }
 
-// readObject reads a stored object from .nut/objects given its SHA.
+// readObject reads a stored object from .nutella/objects given its SHA.
 func readObject(sha string) []byte {
 	dir, name := sha[:2], sha[2:]
-	path := filepath.Join(".nut", "objects", dir, name)
+	path := filepath.Join(".nutella", "objects", dir, name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading object file: %v\n", err)
@@ -1290,7 +1290,7 @@ func readObject(sha string) []byte {
 }
 
 // cleanCurrentDirectory removes all files and directories in the current directory,
-// except for .nut and .nutignore.
+// except for .nutella and .nutignore.
 func cleanCurrentDirectory(ignores []string) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
@@ -1300,7 +1300,7 @@ func cleanCurrentDirectory(ignores []string) {
 
 	for _, entry := range entries {
 		name := entry.Name()
-		if name == ".nut" || name == ".nutignore" {
+		if name == ".nutella" || name == ".nutignore" {
 			continue
 		}
 		if shouldIgnore(name, ignores) {

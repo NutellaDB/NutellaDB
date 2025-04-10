@@ -27,8 +27,8 @@ type Database struct {
 }
 
 func handleInitRepository(basePath string) {
-	// Create the .nut folder within the basePath
-	gitDir := filepath.Join(basePath, ".nut")
+	// Create the .nutella folder within the basePath
+	gitDir := filepath.Join(basePath, ".nutella")
 	dirs := []string{
 		gitDir,
 		filepath.Join(gitDir, "objects"),
@@ -41,14 +41,14 @@ func handleInitRepository(basePath string) {
 		}
 	}
 
-	// Write the HEAD file within the .nut directory.
+	// Write the HEAD file within the .nutella directory.
 	headFileContents := []byte("ref: refs/heads/main\n")
 	headFilePath := filepath.Join(gitDir, "HEAD")
 	if err := os.WriteFile(headFilePath, headFileContents, 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing HEAD file: %s\n", err)
 	}
 
-	// Create snapshots.json file inside the .nut directory
+	// Create snapshots.json file inside the .nutella directory
 	snapshotsFilePath := filepath.Join(gitDir, "snapshots.json")
 	// Initialize with an empty JSON object.
 	initialJSON := []byte("{}")
@@ -56,7 +56,7 @@ func handleInitRepository(basePath string) {
 		fmt.Fprintf(os.Stderr, "Error writing snapshots.json file: %s\n", err)
 	}
 
-	fmt.Printf("Initialized git directory at %s\n", gitDir)
+	fmt.Printf("Initialized nutella directory at %s\n", gitDir)
 }
 
 func HandleInit(dbID string) {
@@ -66,7 +66,7 @@ func HandleInit(dbID string) {
 		fmt.Fprintf(os.Stderr, "Error creating base directory: %s\n", err)
 		return
 	}
-	// Initialize git repository in the provided basePath
+	// Initialize nutella repository in the provided basePath
 	handleInitRepository(basePath)
 }
 
