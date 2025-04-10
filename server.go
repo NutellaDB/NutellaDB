@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"db/btree"
 	"db/cli"
 	"db/database"
-	"github.com/gofiber/fiber/v2"
 	"log"
 	"path/filepath"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 func runCLI(args []string) (string, error) {
@@ -45,6 +47,16 @@ func getDB(dbID string, createIfMissing bool) (*database.Database, error) {
 
 func main() {
 	app := fiber.New()
+
+	app.Get("/api/databases", func(c *fiber.Ctx) error {
+		dbs, err := btree.ListDatabases("./files")
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		}
+		return c.JSON(fiber.Map{"databases": dbs})
+	})
 
 	app.Post("/api/create-db", func(c *fiber.Ctx) error {
 		var body struct {
