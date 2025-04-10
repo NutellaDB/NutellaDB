@@ -24,7 +24,7 @@ func (bt *BTree) Delete(key string) (bool, error) {
 	}
 
 	// If the root is empty and has a child, make the child the new root
-	if len(root.Keys) == 0 && !root.IsLeaf {
+	if len(root.Keys) == 0 && !root.IsLeaf && len(root.Children) > 0 {
 		bt.metadata.Lock()
 		oldRootID := bt.RootID
 		bt.RootID = root.Children[0]
@@ -96,15 +96,17 @@ func (bt *BTree) deleteFromNode(node *Node, key string) (bool, error) {
 
 		// Case 1b: If this is an internal node, find the predecessor or successor
 		// Check if the child exists before proceeding
-		if i < len(node.Children) && !bt.nodeExists(node.Children[i]) {
+		if i >= len(node.Children) || !bt.nodeExists(node.Children[i]) {
 			// Child doesn't exist, handle the inconsistency
-			// Remove this key and its child references
+			// Remove this key and safely adjust children
 			node.Keys = append(node.Keys[:i], node.Keys[i+1:]...)
-			node.Children = append(node.Children[:i], node.Children[i+1:]...)
+			if i < len(node.Children) {
+				node.Children = append(node.Children[:i], node.Children[i+1:]...)
+			}
 			return true, bt.saveNode(node)
 		}
 
-		// Get the predecessor
+		// Try to get the predecessor
 		pred, err := bt.getPredecessor(node, i)
 		if err != nil {
 			// If we can't get the predecessor, try removing the key directly
@@ -143,17 +145,29 @@ func (bt *BTree) deleteFromNode(node *Node, key string) (bool, error) {
 			// Reload the child as it may have been modified
 			childNode, err = bt.loadNodeSafe(node.Children[i])
 			if err != nil {
-				return false, fmt.Errorf("failed to load child node: %v", err)
+				return false, fmt.Errorf("failed to reload child node: %v", err)
 			}
 
 			// If child no longer exists after ensuring min keys, save the node and return
 			if childNode == nil {
+				// Save node before returning
 				return true, bt.saveNode(node)
 			}
 		}
 
 		// Delete the predecessor from the child
-		return bt.deleteFromNode(childNode, pred.Key)
+		deleted, err := bt.deleteFromNode(childNode, pred.Key)
+		if err != nil {
+			return false, err
+		}
+
+		// Ensure the parent node is saved
+		err = bt.saveNode(node)
+		if err != nil {
+			return deleted, fmt.Errorf("failed to save parent node: %v", err)
+		}
+
+		return deleted, nil
 	}
 
 	// Case 2: The key is not in this node
@@ -208,7 +222,7 @@ func (bt *BTree) deleteFromNode(node *Node, key string) (bool, error) {
 		if i < len(node.Children) {
 			childNode, err = bt.loadNodeSafe(node.Children[i])
 			if err != nil {
-				return false, fmt.Errorf("failed to load child node: %v", err)
+				return false, fmt.Errorf("failed to reload child node: %v", err)
 			}
 
 			// If child no longer exists after ensuring min keys, save the node and return
@@ -217,12 +231,25 @@ func (bt *BTree) deleteFromNode(node *Node, key string) (bool, error) {
 			}
 		} else {
 			// The index is now out of bounds, so the key doesn't exist
-			return false, nil
+			return false, bt.saveNode(node)
 		}
 	}
 
 	// Recursively delete from the child
-	return bt.deleteFromNode(childNode, key)
+	deleted, err := bt.deleteFromNode(childNode, key)
+	if err != nil {
+		return false, err
+	}
+
+	// Save the parent node after modifying children
+	if deleted {
+		err = bt.saveNode(node)
+		if err != nil {
+			return deleted, fmt.Errorf("failed to save parent node: %v", err)
+		}
+	}
+
+	return deleted, nil
 }
 
 // getPredecessor finds the predecessor of a key in a node
@@ -249,10 +276,20 @@ func (bt *BTree) getPredecessor(node *Node, index int) (KeyValue, error) {
 	for !child.IsLeaf {
 		if len(child.Children) == 0 {
 			// This should not happen in a valid B-tree, but handle it
-			return KeyValue{}, fmt.Errorf("internal node has no children")
+			child.IsLeaf = true // Fix: Mark as leaf if it has no children
+			err = bt.saveNode(child)
+			if err != nil {
+				fmt.Printf("Warning: Failed to save fixed node: %v\n", err)
+			}
+			break
 		}
 
-		childID = child.Children[len(child.Children)-1]
+		lastChildIndex := len(child.Children) - 1
+		if lastChildIndex < 0 {
+			return KeyValue{}, fmt.Errorf("invalid child index")
+		}
+
+		childID = child.Children[lastChildIndex]
 
 		// Check if the next child exists
 		if !bt.nodeExists(childID) {
@@ -329,8 +366,10 @@ func (bt *BTree) ensureMinKeys(node *Node, index int) error {
 			child.Keys = append([]KeyValue{node.Keys[index-1]}, child.Keys...)
 
 			// Move a key from the left sibling to the parent
-			node.Keys[index-1] = leftSibling.Keys[len(leftSibling.Keys)-1]
-			leftSibling.Keys = leftSibling.Keys[:len(leftSibling.Keys)-1]
+			if len(leftSibling.Keys) > 0 {
+				node.Keys[index-1] = leftSibling.Keys[len(leftSibling.Keys)-1]
+				leftSibling.Keys = leftSibling.Keys[:len(leftSibling.Keys)-1]
+			}
 
 			// Move a child from the left sibling to the child (if not a leaf)
 			if !child.IsLeaf && len(leftSibling.Children) > 0 {
@@ -379,8 +418,10 @@ func (bt *BTree) ensureMinKeys(node *Node, index int) error {
 			child.Keys = append(child.Keys, node.Keys[index])
 
 			// Move a key from the right sibling to the parent
-			node.Keys[index] = rightSibling.Keys[0]
-			rightSibling.Keys = rightSibling.Keys[1:]
+			if len(rightSibling.Keys) > 0 {
+				node.Keys[index] = rightSibling.Keys[0]
+				rightSibling.Keys = rightSibling.Keys[1:]
+			}
 
 			// Move a child from the right sibling to the child (if not a leaf)
 			if !child.IsLeaf && len(rightSibling.Children) > 0 {
@@ -477,15 +518,16 @@ func (bt *BTree) mergeNodes(parent *Node, index int, left *Node, right *Node) er
 	left.Keys = append(left.Keys, right.Keys...)
 
 	// Move all children from the right node to the left node (if not a leaf)
-	if !left.IsLeaf {
+	if !left.IsLeaf && len(right.Children) > 0 {
 		left.Children = append(left.Children, right.Children...)
 	}
 
 	// Remove the right child from the parent
-	if index+1 < len(parent.Children) {
-		parent.Children = append(parent.Children[:index+1], parent.Children[index+2:]...)
-	} else {
-		parent.Children = parent.Children[:index+1]
+	rightChildIndex := index + 1
+	if rightChildIndex < len(parent.Children) {
+		parent.Children = append(parent.Children[:rightChildIndex], parent.Children[rightChildIndex+1:]...)
+	} else if len(parent.Children) > rightChildIndex {
+		parent.Children = parent.Children[:rightChildIndex]
 	}
 
 	// Save the modified nodes
@@ -540,13 +582,17 @@ func (bt *BTree) repairNode(node *Node) error {
 		validChildren := []int{}
 		validKeys := []KeyValue{}
 
+		// Keep track of keys corresponding to valid children
+		keyIndex := 0
+
 		for i, childID := range node.Children {
 			if bt.nodeExists(childID) {
 				validChildren = append(validChildren, childID)
 
-				// Keep corresponding keys
-				if i > 0 && i-1 < len(node.Keys) {
-					validKeys = append(validKeys, node.Keys[i-1])
+				// Keep corresponding keys (ensuring we don't go out of bounds)
+				if i > 0 && keyIndex < len(node.Keys) {
+					validKeys = append(validKeys, node.Keys[keyIndex])
+					keyIndex++
 				}
 
 				// Recursively repair child
@@ -562,7 +608,18 @@ func (bt *BTree) repairNode(node *Node) error {
 
 		// Update node with valid children and keys
 		node.Children = validChildren
-		node.Keys = validKeys
+
+		// Ensure we have the right number of keys
+		if len(validChildren) > 0 {
+			// For internal nodes, we need (n-1) keys for n children
+			if len(validKeys) > len(validChildren)-1 {
+				node.Keys = validKeys[:len(validChildren)-1]
+			} else {
+				node.Keys = validKeys
+			}
+		} else {
+			node.Keys = []KeyValue{}
+		}
 
 		// If node is now empty, make it a leaf
 		if len(node.Children) == 0 {
