@@ -26,6 +26,50 @@ type Database struct {
 	lock         sync.RWMutex
 }
 
+func handleInitRepository(basePath string) {
+	// Create the .nut folder within the basePath
+	gitDir := filepath.Join(basePath, ".nut")
+	dirs := []string{
+		gitDir,
+		filepath.Join(gitDir, "objects"),
+		filepath.Join(gitDir, "refs"),
+	}
+
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating directory %s: %s\n", dir, err)
+		}
+	}
+
+	// Write the HEAD file within the .nut directory.
+	headFileContents := []byte("ref: refs/heads/main\n")
+	headFilePath := filepath.Join(gitDir, "HEAD")
+	if err := os.WriteFile(headFilePath, headFileContents, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing HEAD file: %s\n", err)
+	}
+
+	// Create snapshots.json file inside the .nut directory
+	snapshotsFilePath := filepath.Join(gitDir, "snapshots.json")
+	// Initialize with an empty JSON object.
+	initialJSON := []byte("{}")
+	if err := os.WriteFile(snapshotsFilePath, initialJSON, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing snapshots.json file: %s\n", err)
+	}
+
+	fmt.Printf("Initialized git directory at %s\n", gitDir)
+}
+
+func HandleInit(dbID string) {
+	basePath := filepath.Join(".", "files", dbID)
+
+	if err := os.MkdirAll(basePath, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating base directory: %s\n", err)
+		return
+	}
+	// Initialize git repository in the provided basePath
+	handleInitRepository(basePath)
+}
+
 func NewDatabase(dbPath string, dbID string) (*Database, error) {
 	// Create the database directory if not exists
 	if err := os.MkdirAll(dbPath, 0755); err != nil {
@@ -55,6 +99,8 @@ func NewDatabase(dbPath string, dbID string) (*Database, error) {
 			return nil, fmt.Errorf("failed to create new manifest: %v", err)
 		}
 	}
+
+	HandleInit(dbID)
 
 	return db, nil
 }

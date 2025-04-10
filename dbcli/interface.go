@@ -647,15 +647,7 @@ var handleInitCmd = &cobra.Command{
 	Long:  "This command initializes a new git directory in the specified database folder.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		dbID := args[0]
-		basePath := filepath.Join(".", "files", dbID)
-
-		if err := os.MkdirAll(basePath, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating base directory: %s\n", err)
-			return
-		}
-		// Initialize git repository in the provided basePath
-		handleInit(basePath)
+		database.HandleInit(args[0])
 	},
 }
 
@@ -666,39 +658,6 @@ var handleInitCmd = &cobra.Command{
 // 	Long: "Starts the NutellaDB server as an API [see /docs for API documentation]",
 // 	Run:  server.Server,
 // }
-
-func handleInit(basePath string) {
-	// Create the .nut folder within the basePath
-	gitDir := filepath.Join(basePath, ".nut")
-	dirs := []string{
-		gitDir,
-		filepath.Join(gitDir, "objects"),
-		filepath.Join(gitDir, "refs"),
-	}
-
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating directory %s: %s\n", dir, err)
-		}
-	}
-
-	// Write the HEAD file within the .nut directory.
-	headFileContents := []byte("ref: refs/heads/main\n")
-	headFilePath := filepath.Join(gitDir, "HEAD")
-	if err := os.WriteFile(headFilePath, headFileContents, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing HEAD file: %s\n", err)
-	}
-
-	// Create snapshots.json file inside the .nut directory
-	snapshotsFilePath := filepath.Join(gitDir, "snapshots.json")
-	// Initialize with an empty JSON object.
-	initialJSON := []byte("{}")
-	if err := os.WriteFile(snapshotsFilePath, initialJSON, 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing snapshots.json file: %s\n", err)
-	}
-
-	fmt.Printf("Initialized git directory at %s\n", gitDir)
-}
 
 // commitMessage will hold the commit message from the "-m" flag.
 var commitMessage string
