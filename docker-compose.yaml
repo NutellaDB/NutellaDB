@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  startserver:
+    build: .
+    ports:
+      - "3000:3000"
+    command: startserver
+    volumes:
+      # Map the local 'files' directory to the container's '/root/files'
+      - ./files:/root/files
+  nutella:
+    build: .
+    volumes:
+      # Map the local 'files' directory to the container's '/root/files'
+      - ./files:/root/files
