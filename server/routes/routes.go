@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"db/database"
 	cli "db/dbcli"
+	"fmt"
+	"log"
 	"path/filepath"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 var openDBs = map[string]*database.Database{}
@@ -15,23 +19,29 @@ func basePath(dbID string) string {
 	return filepath.Join(".", "files", dbID)
 }
 
-func getDB(dbID string, createIfMissing bool) (*database.Database, error) {
+func getDB(dbID string, createIfMissing bool) (*database.Database, string, error) {
 	if db, ok := openDBs[dbID]; ok {
-		return db, nil
+		return db, dbID, nil
 	}
 
 	db, err := database.LoadDatabase(basePath(dbID))
 	if err != nil {
 		if !createIfMissing {
-			return nil, err
+			return nil, "", err
 		}
+		dbUUID, err := uuid.NewRandom()
+		if err != nil {
+			log.Fatalf("failed to generate uuid: %v", err)
+		}
+		dbSuffix := strings.Split(dbUUID.String(), "-")[0]
+		dbID := fmt.Sprintf("db_%s", dbSuffix)
 		db, err = database.NewDatabase(basePath(dbID), dbID)
 		if err != nil {
-			return nil, err
+			return nil, dbID, err
 		}
 	}
 	openDBs[dbID] = db
-	return db, nil
+	return db, dbID, nil
 }
 
 func runCLI(args []string) (string, error) {
@@ -54,18 +64,12 @@ func SetupRoutes(router fiber.Router) {
 		return c.JSON(fiber.Map{"databases": dbs})
 	})
 
-	router.Post("/create-db", func(c *fiber.Ctx) error {
-		var body struct {
-			DBID string `json:"dbID"`
-		}
-		if err := c.BodyParser(&body); err != nil || body.DBID == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "body must contain dbID"})
-		}
-
-		if _, err := getDB(body.DBID, true); err != nil {
+	router.Get("/create-db", func(c *fiber.Ctx) error {
+		_, dbID, err := getDB("", true)
+		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
-		return c.JSON(fiber.Map{"status": "created", "dbID": body.DBID})
+		return c.JSON(fiber.Map{"status": "created", "dbID": dbID})
 	})
 
 	router.Post("/create-collection", func(c *fiber.Ctx) error {
@@ -78,7 +82,7 @@ func SetupRoutes(router fiber.Router) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "dbID, name and order>=3 required"})
 		}
 
-		db, err := getDB(body.DBID, false)
+		db, _, err := getDB(body.DBID, false)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -99,7 +103,7 @@ func SetupRoutes(router fiber.Router) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid json"})
 		}
 
-		db, err := getDB(body.DBID, false)
+		db, _, err := getDB(body.DBID, false)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -117,7 +121,27 @@ func SetupRoutes(router fiber.Router) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing query params"})
 		}
 
-		db, err := getDB(dbID, false)
+		db, _, err := getDB(dbID, false)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+		}
+		coll, err := db.GetCollection(colName)
+		if err != nil {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+		}
+		val, found := coll.FindKey(key)
+		if !found {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "key not found"})
+		}
+		return c.JSON(fiber.Map{"value": val})
+	})
+	router.Get("/find", func(c *fiber.Ctx) error {
+		dbID, colName, key := c.Query("dbID"), c.Query("collection"), c.Query("key")
+		if dbID == "" || colName == "" || key == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing query params"})
+		}
+
+		db, _, err := getDB(dbID, false)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -142,7 +166,7 @@ func SetupRoutes(router fiber.Router) {
 		if err := c.BodyParser(&body); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid json"})
 		}
-		db, err := getDB(body.DBID, false)
+		db, _, err := getDB(body.DBID, false)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -160,7 +184,7 @@ func SetupRoutes(router fiber.Router) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing query params"})
 		}
 
-		db, err := getDB(dbID, false)
+		db, _, err := getDB(dbID, false)
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
