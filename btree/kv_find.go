@@ -15,7 +15,9 @@ func (bt *BTree) Find(key string) (interface{}, bool, error) {
 func (bt *BTree) FindAll() []KeyValue {
 	root, _ := bt.loadNode((bt.RootID))
 	result := []KeyValue{}
-	bt.findAllNodes(root, &result)
+	if root != nil {
+		bt.findAllNodes(root, &result)
+	}
 	return result
 }
 

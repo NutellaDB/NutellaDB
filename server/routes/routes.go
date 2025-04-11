@@ -299,13 +299,13 @@ func SetupRoutes(router fiber.Router) {
 
 	router.Post("/restore-to", func(c *fiber.Ctx) error {
 		var b struct {
-			DBID       string `json:"dbID"`
-			CommitHash string `json:"commit_hash"`
+			DBID        string `json:"dbID"`
+			Commit_hash string `json:"commit_hash"`
 		}
-		if err := c.BodyParser(&b); err != nil || b.DBID == "" {
-			return c.Status(400).JSON(fiber.Map{"error": "dbID required"})
+		if err := c.BodyParser(&b); err != nil || b.DBID == "" || b.Commit_hash == "" {
+			return c.Status(400).JSON(fiber.Map{"error": "DBID required"})
 		}
-		out, err := runCLI([]string{"restore-to", b.DBID, b.CommitHash})
+		out, err := runCLI([]string{"restore-to", b.DBID, b.Commit_hash})
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error(), "output": out})
 		}
