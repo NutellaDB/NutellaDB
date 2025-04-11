@@ -34,7 +34,7 @@ func getDB(dbID string, createIfMissing bool) (*database.Database, string, error
 			log.Fatalf("failed to generate uuid: %v", err)
 		}
 		dbSuffix := strings.Split(dbUUID.String(), "-")[0]
-		dbID := fmt.Sprintf("db_%s", dbSuffix)
+		dbID = fmt.Sprintf("db_%s", dbSuffix)
 		db, err = database.NewDatabase(basePath(dbID), dbID)
 		if err != nil {
 			return nil, dbID, err
