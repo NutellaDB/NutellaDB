@@ -173,9 +173,11 @@ func SetupRoutes(router fiber.Router) {
 		dbName := c.Query("dbID")
 		basePath := filepath.Join(".", "files", dbName)
 
-		// Change working directory to the repository base.
-		if err := os.Chdir(basePath); err != nil {
-			fmt.Fprintf(os.Stderr, "Error changing directory to %s: %v\n", basePath, err)
+		cwd, _ := os.Getwd()
+		if !strings.HasSuffix(cwd, basePath) {
+			if err := os.Chdir(basePath); err != nil {
+				fmt.Fprintf(os.Stderr, "Error changing directory to %s: %v\n", basePath, err)
+			}
 		}
 		snapshots, err := dbcli.LoadSnapshots()
 		if err != nil {
@@ -291,21 +293,23 @@ func SetupRoutes(router fiber.Router) {
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error(), "output": out})
 		}
+		delete(openDBs, b.DBID)
 		return c.JSON(fiber.Map{"output": out})
 	})
 
 	router.Post("/restore-to", func(c *fiber.Ctx) error {
 		var b struct {
-			DBID        string
-			commit_hash string
+			DBID       string `json:"dbID"`
+			CommitHash string `json:"commit_hash"`
 		}
 		if err := c.BodyParser(&b); err != nil || b.DBID == "" {
 			return c.Status(400).JSON(fiber.Map{"error": "dbID required"})
 		}
-		out, err := runCLI([]string{"restore-to", b.DBID, b.commit_hash})
+		out, err := runCLI([]string{"restore-to", b.DBID, b.CommitHash})
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error(), "output": out})
 		}
+		delete(openDBs, b.DBID)
 		return c.JSON(fiber.Map{"output": out})
 	})
 

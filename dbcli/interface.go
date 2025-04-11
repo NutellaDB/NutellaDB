@@ -1125,9 +1125,12 @@ var restoreCmd = &cobra.Command{
 		basePath := filepath.Join(".", "files", dbName)
 
 		// Change working directory to the repository base.
-		if err := os.Chdir(basePath); err != nil {
-			fmt.Fprintf(os.Stderr, "Error changing directory to %s: %v\n", basePath, err)
-			os.Exit(1)
+		cwd, _ := os.Getwd()
+		fmt.Printf("Current working directory: %s\n", cwd)
+		if !strings.HasSuffix(cwd, basePath) {
+			if err := os.Chdir(basePath); err != nil {
+				fmt.Fprintf(os.Stderr, "Error changing directory to %s: %v\n", basePath, err)
+			}
 		}
 
 		// Load snapshots from .nutella/snapshots.json.
@@ -1264,6 +1267,10 @@ func LoadSnapshots() (map[string]Snapshot, error) {
 
 // readObject reads a stored object from .nutella/objects given its SHA.
 func readObject(sha string) []byte {
+	if len(sha) < 2 {
+		fmt.Fprintf(os.Stderr, "Invalid SHA: %q\n", sha)
+		os.Exit(1)
+	}
 	dir, name := sha[:2], sha[2:]
 	path := filepath.Join(".nutella", "objects", dir, name)
 	data, err := os.ReadFile(path)
