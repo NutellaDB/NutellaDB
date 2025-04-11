@@ -13,6 +13,7 @@
   - [Delta Compression](#delta-compression)
   - [.nutellaignore File](#nutellaignore-file)
   - [In-Memory LRU Cache](#in-memory-lru-cache)
+- [Error Handling](#error-handling)
 
 ---
 
@@ -149,3 +150,28 @@ By applying version control principles to database management, Nutella enables d
   - Maximum cache size can be customized via `SetMaxSize(n)` and queried via `GetMaxSize()`.
 
 This caching system greatly improves efficiency for frequently accessed values and is an integral part of Nutella’s fast and responsive behavior.
+
+---
+
+## Error Handling
+
+### Description
+Nutella includes robust error handling across all CLI operations to help identify and troubleshoot issues effectively. Errors are reported with meaningful messages to aid debugging and maintain user clarity.
+
+### Common Error Cases
+- **Database or Collection Not Found:**  
+  Triggered when a requested database or collection is missing or not initialized.
+
+- **Invalid Command Parameters:**  
+  Occurs when CLI commands are passed with incorrect flags, missing arguments, or invalid combinations.
+
+- **Compression/Decompression Errors:**  
+  Raised when delta compression fails due to file corruption or incompatible delta formats.
+
+- **File System Errors:**  
+  Errors like read/write permission issues, missing files, or corrupt `.nutella` directories will generate appropriate error messages.
+
+- **Invalid Object Format:**  
+  If Nutella encounters an object with an unexpected or malformed format, the system will throw a parse error during object resolution.
+
+Clear error messages are printed to the terminal, and where possible, hints are included to guide the user toward resolving the issue.
