@@ -135,7 +135,7 @@ func SetupRoutes(router fiber.Router) {
 		}
 		return c.JSON(fiber.Map{"value": val})
 	})
-	router.Get("/find", func(c *fiber.Ctx) error {
+	router.Get("/find-all", func(c *fiber.Ctx) error {
 		dbID, colName, key := c.Query("dbID"), c.Query("collection"), c.Query("key")
 		if dbID == "" || colName == "" || key == "" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing query params"})
