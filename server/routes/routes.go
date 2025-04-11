@@ -3,11 +3,15 @@ package routes
 import (
 	"bytes"
 	"db/database"
+	"db/dbcli"
 	cli "db/dbcli"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -149,6 +153,51 @@ func SetupRoutes(router fiber.Router) {
 		val := coll.FindAllKV()
 
 		return c.JSON(fiber.Map{"value": val})
+	})
+
+	router.Get("/snapshots", func(c *fiber.Ctx) error {
+		dbName := c.Query("dbID")
+		basePath := filepath.Join(".", "files", dbName)
+
+		// Change working directory to the repository base.
+		if err := os.Chdir(basePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error changing directory to %s: %v\n", basePath, err)
+			os.Exit(1)
+		}
+		snapshots, err := dbcli.LoadSnapshots()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error loading snapshots: %v\n", err)
+			os.Exit(1)
+		}
+
+		if len(snapshots) == 0 {
+			fmt.Fprintf(os.Stderr, "No snapshots found.\n")
+			os.Exit(1)
+		}
+
+		// Convert map to slice for sorting.
+		type snapEntry struct {
+			Key      string
+			Snapshot dbcli.Snapshot
+		}
+		var snapshotList []snapEntry
+		for key, snap := range snapshots {
+			snapshotList = append(snapshotList, snapEntry{Key: key, Snapshot: snap})
+		}
+
+		// Sort snapshots by timestamp.
+		// If timestamps cannot be parsed, fallback to a simple string comparison.
+		sort.Slice(snapshotList, func(i, j int) bool {
+			ti, err1 := time.Parse(time.RFC3339, snapshotList[i].Snapshot.Timestamp)
+			tj, err2 := time.Parse(time.RFC3339, snapshotList[j].Snapshot.Timestamp)
+			if err1 != nil || err2 != nil {
+				return snapshotList[i].Snapshot.Timestamp < snapshotList[j].Snapshot.Timestamp
+			}
+			return ti.Before(tj)
+		})
+
+		return c.Status(200).JSON(fiber.Map{"snapshots": snapshotList})
+
 	})
 
 	router.Post("/update", func(c *fiber.Ctx) error {

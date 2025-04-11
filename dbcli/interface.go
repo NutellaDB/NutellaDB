@@ -1131,7 +1131,7 @@ var restoreCmd = &cobra.Command{
 		}
 
 		// Load snapshots from .nutella/snapshots.json.
-		snapshots, err := loadSnapshots()
+		snapshots, err := LoadSnapshots()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading snapshots: %v\n", err)
 			os.Exit(1)
@@ -1249,8 +1249,8 @@ func restoreCommit(commitSha string) {
 	fmt.Printf("Restored to commit %s\n", commitSha)
 }
 
-// loadSnapshots reads snapshots from .nutella/snapshots.json.
-func loadSnapshots() (map[string]Snapshot, error) {
+// LoadSnapshots reads snapshots from .nutella/snapshots.json.
+func LoadSnapshots() (map[string]Snapshot, error) {
 	data, err := os.ReadFile(filepath.Join(".nutella", "snapshots.json"))
 	if err != nil {
 		return nil, err
