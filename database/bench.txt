@@ -1,0 +1,13 @@
+=== RUN   TestBenchmarkOperations
+Initialized nutella directory at files/test_db_1744333298667766467/.nutella
+[]
+    collection_test.go:50: Running Insert benchmark with 10000 operations
+    collection_test.go:80: Insert benchmark completed: 10000 operations in 1.259420028s (avg 125.94 µs per operation)
+    collection_test.go:86: Running Find benchmark with 10000 operations
+    collection_test.go:109: Find benchmark completed: 10000 operations in 121.021096ms (avg 12.10 µs per operation)
+    collection_test.go:111: Find success rate: 10000/10000 (100.00%)
+    collection_test.go:117: Running Update benchmark with 10000 operations
+    collection_test.go:147: Update benchmark completed: 10000 operations in 589.120229ms (avg 58.91 µs per operation)
+--- PASS: TestBenchmarkOperations (2.26s)
+PASS
+ok  	db/database	2.257s

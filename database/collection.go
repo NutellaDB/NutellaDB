@@ -47,6 +47,11 @@ func (c *Collection) FindKey(key string) (interface{}, bool) {
 	return val, found
 }
 
+func (c *Collection) FindAllKV() []btree.KeyValue {
+	result := c.btree.FindAll()
+	return result
+}
+
 // UpdateKV wraps the btree update
 func (c *Collection) UpdateKV(key string, value interface{}) {
 	updated, err := c.btree.Update(key, value)

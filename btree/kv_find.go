@@ -12,6 +12,26 @@ func (bt *BTree) Find(key string) (interface{}, bool, error) {
 	return bt.findInNode(root, key)
 }
 
+func (bt *BTree) FindAll() []KeyValue {
+	root, _ := bt.loadNode((bt.RootID))
+	result := []KeyValue{}
+	bt.findAllNodes(root, &result)
+	return result
+}
+
+func (bt *BTree) findAllNodes(node *Node, result *([]KeyValue)) {
+	for i := range len(node.Keys) {
+		*result = append(*result, node.Keys[i])
+	}
+	if node.IsLeaf {
+		return
+	}
+	for i := range len(node.Children) {
+		child, _ := bt.loadNode(node.Children[i])
+		bt.findAllNodes(child, result)
+	}
+}
+
 func (bt *BTree) findInNode(node *Node, key string) (interface{}, bool, error) {
 
 	i := 0

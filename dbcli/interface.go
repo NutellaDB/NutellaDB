@@ -585,6 +585,35 @@ var findKeyCmd = &cobra.Command{
 	},
 }
 
+// Command to find a key in a collection
+var findAllCmd = &cobra.Command{
+	Use:   "find-all [dbID] [collection]",
+	Short: "Find all keys in a collection",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbID := args[0]
+		collName := args[1]
+
+		basePath := filepath.Join(".", "files", dbID)
+
+		db, err := database.LoadDatabase(basePath)
+		if err != nil {
+			log.Fatalf("Error loading database '%s': %v", dbID, err)
+		}
+		defer db.Close()
+
+		coll, err := db.GetCollection(collName)
+		if err != nil {
+			log.Fatalf("Error getting collection '%s': %v", collName, err)
+		}
+
+		result := coll.FindAllKV()
+		for i := range len(result) {
+			fmt.Printf("%s : %v\n", result[i].Key, result[i].Value)
+		}
+	},
+}
+
 // Command to update a key-value pair in a collection
 var updateCmd = &cobra.Command{
 	Use:   "update [dbID] [collection] [key] [new_value]",
@@ -1387,6 +1416,7 @@ func Init() {
 	RootCmd.AddCommand(createCollectionCmd)
 	RootCmd.AddCommand(insertCmd)
 	RootCmd.AddCommand(findKeyCmd)
+	RootCmd.AddCommand(findAllCmd)
 	RootCmd.AddCommand(updateCmd)
 	RootCmd.AddCommand(deleteCmd)
 	RootCmd.AddCommand(handleInitCmd)
