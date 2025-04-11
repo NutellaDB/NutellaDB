@@ -136,10 +136,7 @@ func SetupRoutes(router fiber.Router) {
 		return c.JSON(fiber.Map{"value": val})
 	})
 	router.Get("/find-all", func(c *fiber.Ctx) error {
-		dbID, colName, key := c.Query("dbID"), c.Query("collection"), c.Query("key")
-		if dbID == "" || colName == "" || key == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "missing query params"})
-		}
+		dbID, colName := c.Query("dbID"), c.Query("collection")
 
 		db, _, err := getDB(dbID, false)
 		if err != nil {
@@ -149,10 +146,8 @@ func SetupRoutes(router fiber.Router) {
 		if err != nil {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
 		}
-		val, found := coll.FindKey(key)
-		if !found {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "key not found"})
-		}
+		val := coll.FindAllKV()
+
 		return c.JSON(fiber.Map{"value": val})
 	})
 
