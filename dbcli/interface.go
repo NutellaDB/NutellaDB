@@ -1164,6 +1164,31 @@ var restoreCmd = &cobra.Command{
 	},
 }
 
+// New Restore Command
+var restoreToCmd = &cobra.Command{
+	Use:   "restore-to <dbname> <commit-hash>",
+	Short: "Restore a database to a previous commit snapshot",
+	Long: `This command will:
+  1. Change directory to the given database (./files/<dbname>).
+  2. Load snapshots stored in .nutella/snapshots.json.
+  3. Display the commit hash, commit message, and timestamp (sorted by time).
+  4. Prompt for a commit hash to restore.
+  5. Restore the working directory to that commit state.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		dbName := args[0]
+		basePath := filepath.Join(".", "files", dbName)
+
+		// Change working directory to the repository base.
+		if err := os.Chdir(basePath); err != nil {
+			fmt.Fprintf(os.Stderr, "Error changing directory to %s: %v\n", basePath, err)
+			os.Exit(1)
+		}
+
+		restoreCommit(args[1])
+	},
+}
+
 // restoreCommit reads the commit object, extracts the tree SHA, cleans the directory,
 // and restores the tree from that commit.
 func restoreCommit(commitSha string) {
@@ -1368,6 +1393,7 @@ func Init() {
 	RootCmd.AddCommand(handleCommitAllCmd)
 	handleCommitAllCmd.Flags().StringVarP(&commitMessage, "message", "m", "", "Commit message")
 	RootCmd.AddCommand(restoreCmd)
+	RootCmd.AddCommand(restoreToCmd)
 	RootCmd.AddCommand(packObjectsCmd)
 
 }
