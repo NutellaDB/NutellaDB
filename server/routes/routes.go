@@ -79,11 +79,11 @@ func SetupRoutes(router fiber.Router) {
 	router.Get("/collections", func(c *fiber.Ctx) error {
 		dbID := c.Query("dbID")
 		if dbID == "" {
-			return c.Status(400).JSON(fiber.Map{"error":"dbID required"})
+			return c.Status(400).JSON(fiber.Map{"error": "dbID required"})
 		}
 		db, _, err := getDB(dbID, false)
 		if err != nil {
-			return c.Status(404).JSON(fiber.Map{"error":err.Error()})
+			return c.Status(404).JSON(fiber.Map{"error": err.Error()})
 		}
 		names, _ := db.GetAllCollections()
 		return c.JSON(fiber.Map{"collections": names})
@@ -176,7 +176,6 @@ func SetupRoutes(router fiber.Router) {
 		// Change working directory to the repository base.
 		if err := os.Chdir(basePath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error changing directory to %s: %v\n", basePath, err)
-			os.Exit(1)
 		}
 		snapshots, err := dbcli.LoadSnapshots()
 		if err != nil {
@@ -186,7 +185,7 @@ func SetupRoutes(router fiber.Router) {
 
 		if len(snapshots) == 0 {
 			fmt.Fprintf(os.Stderr, "No snapshots found.\n")
-			os.Exit(1)
+			// os.Exit(1)
 		}
 
 		// Convert map to slice for sorting.
@@ -209,6 +208,8 @@ func SetupRoutes(router fiber.Router) {
 			}
 			return ti.Before(tj)
 		})
+
+		os.Chdir("../..")
 
 		return c.Status(200).JSON(fiber.Map{"snapshots": snapshotList})
 
