@@ -76,6 +76,19 @@ func SetupRoutes(router fiber.Router) {
 		return c.JSON(fiber.Map{"status": "created", "dbID": dbID})
 	})
 
+	router.Get("/collections", func(c *fiber.Ctx) error {
+		dbID := c.Query("dbID")
+		if dbID == "" {
+			return c.Status(400).JSON(fiber.Map{"error":"dbID required"})
+		}
+		db, _, err := getDB(dbID, false)
+		if err != nil {
+			return c.Status(404).JSON(fiber.Map{"error":err.Error()})
+		}
+		names, _ := db.GetAllCollections()
+		return c.JSON(fiber.Map{"collections": names})
+	})
+
 	router.Post("/create-collection", func(c *fiber.Ctx) error {
 		var body struct {
 			DBID  string `json:"dbID"`
@@ -139,6 +152,7 @@ func SetupRoutes(router fiber.Router) {
 		}
 		return c.JSON(fiber.Map{"value": val})
 	})
+
 	router.Get("/find-all", func(c *fiber.Ctx) error {
 		dbID, colName := c.Query("dbID"), c.Query("collection")
 
