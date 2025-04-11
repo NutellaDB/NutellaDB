@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"db/btree" // your existing B-tree package
+	"db/cache"
 )
 
 // Focus Niggers.
@@ -59,15 +60,19 @@ func handleInitRepository(basePath string) {
 	fmt.Printf("Initialized nutella directory at %s\n", gitDir)
 }
 
-func HandleInit(dbID string) {
-	basePath := filepath.Join(".", "files", dbID)
+func getBasepath(dbID string) string {
+	return filepath.Join(".", "files", dbID)
+}
 
+func HandleInit(dbID string) {
+	basePath := getBasepath(dbID)
 	if err := os.MkdirAll(basePath, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating base directory: %s\n", err)
 		return
 	}
 	// Initialize nutella repository in the provided basePath
 	handleInitRepository(basePath)
+	_, _ = cache.CreateCache(basePath, []string{})
 }
 
 func NewDatabase(dbPath string, dbID string) (*Database, error) {
@@ -133,7 +138,6 @@ func LoadDatabase(dbPath string) (*Database, error) {
 // CreateCollection creates a subdir for this collection's B-tree
 func (db *Database) CreateCollection(name string, order int) error {
 	db.lock.Lock()
-	defer db.lock.Unlock()
 
 	// Check if it already exists
 	if _, exists := db.manifest.Collections[name]; exists {
@@ -168,7 +172,11 @@ func (db *Database) CreateCollection(name string, order int) error {
 		return fmt.Errorf("failed to save manifest after creating collection: %v", err)
 	}
 
-	return nil
+	db.lock.Unlock()
+
+	err = cache.AddCollectionToMemory(getBasepath(db.manifest.DBID), name)
+
+	return err
 }
 
 // GetCollection loads (if not already loaded) or returns a handle to the named collection
