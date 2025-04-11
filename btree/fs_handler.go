@@ -27,9 +27,9 @@ func (bt *BTree) saveNode(node *Node) error {
 
 func (bt *BTree) loadNode(id int) (*Node, error) {
 
-	if node, ok := bt.nodeCache[id]; ok {
-		return node, nil
-	}
+	// if node, ok := bt.nodeCache[id]; ok {
+	// 	return node, nil
+	// }
 
 	nodePath := filepath.Join(bt.PageDir, fmt.Sprintf("page_%d.json", id))
 	data, err := os.ReadFile(nodePath)
